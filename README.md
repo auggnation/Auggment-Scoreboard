@@ -1,7 +1,8 @@
 Auggmented Scoreboard
+
 Auggmented Scoreboard is a Python-based web application designed to turn any TV into a dynamic sports ticker and schedule board. Developed for both professional and local sports enthusiasts, it fetches real-time data from ESPN and integrates local school schedules via RSS, iCal, or MaxPreps feeds.
 
-🚀 What It Does
+What It Does
 
 Live Scores & Tickers: Displays real-time scores for NFL, MLB, NBA, NHL, and more.  
 
@@ -17,7 +18,8 @@ Kiosk/Server Architecture: Run one central Server and pair multiple Kiosks (TVs)
 
 Smart Automation: Built-in display scheduling to turn TVs on/off at specific times and auto-update functionality via GitHub or local zip packages.  
 
-📋 Requirements
+Requirements
+
 Operating System:
 
 Raspberry Pi: Raspberry Pi OS (Lite is recommended for Server; Desktop for Kiosk).
@@ -46,10 +48,12 @@ Kiosk: A display-only client that points to a server.
 
 Combined: Runs both backend and display on one machine (best for single-TV setups).
 
-🌐 Google Chrome Troubleshooting (x86_64)
+Google Chrome Troubleshooting (x86_64)
+
 On PC-based Linux (x86_64), the script prefers Google Chrome for kiosk stability, while Raspberry Pi (ARM) always uses Chromium.
 
 If Chrome fails to install:
+
 Manual Download: If the installer cannot find the .deb file, download it manually:
 
 Bash
