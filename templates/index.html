@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Gameday Scoreboard</title>
+    <link id="font-link" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="pg-index">
+    <header id="main-header">
+        <div id="header-left">
+            <span id="display-name">Scoreboard</span>
+            <span id="header-sep">|</span>
+            <span id="top-clock">00:00 PM</span>
+        </div>
+        <div id="weather">--</div>
+    </header>
+
+
+    <div class="stage" id="main-stage">
+        <div class="slide active" id="logo-slide">
+            <center><img src="/static/uploads/logo.png" onerror="this.src='https://via.placeholder.com/560x400?text=SCOREBOARD'"></center>
+        </div>
+    </div>
+
+
+    <footer id="main-footer">
+        <div class="ticker-wrap">
+            <div class="ticker" id="ticker-text">LOADING GAMEDAY FEED...</div>
+        </div>
+    </footer>
+
+
+    <script>
+        function updateScale() {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const scale = Math.max(1, Math.min(vw / 1920, vh / 1080));
+            document.documentElement.style.setProperty('--ui-scale', scale);
+            document.documentElement.style.setProperty('--px', scale + 'px');
+        }
+
+
+        // ─── ORIENTATION ───
+        let currentOrientation = 'auto';
+
+
+        function applyOrientation(orientation) {
+            currentOrientation = orientation;
+            const isPortrait  = window.innerHeight > window.innerWidth;
+            // Phone heuristic: portrait phones have width ≤ 600px; landscape phones flip so
+            // innerWidth becomes the long side (> 600px) but innerHeight stays small (≤ 500px).
+            // A rotated TV in landscape has height 1080px, well above 500px.
+            const isPhone = window.innerWidth <= 600 || window.innerHeight <= 500;
+
+            let useVertical = false;
+            let usePhone    = false;
+
+            if (orientation === 'vertical') {
+                useVertical = true;
+                if (isPhone) usePhone = true;   // scale for the actual screen, not a TV
+            } else if (orientation === 'phone') {
+                useVertical = true;
+                usePhone    = true;
+            } else if (orientation === 'auto') {
+                if (isPortrait) {
+                    useVertical = true;
+                    if (isPhone) usePhone = true;
+                } else if (isPhone) {
+                    usePhone = true;            // landscape phone: apply phone scaling
+                }
+            }
+            // 'horizontal' or auto-landscape non-phone: neither class set
+
+            document.body.classList.toggle('vertical', useVertical);
+            document.body.classList.toggle('phone',    usePhone);
+        }
+
+
+        window.addEventListener('resize', () => { updateScale(); applyOrientation(currentOrientation); });
+        updateScale();
+        applyOrientation('auto');
+        // ─── CLOCK ───
+        let _lastClockStr = '';
+        function updateClock() {
+            const now = new Date();
+            const s = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            if (s !== _lastClockStr) {
+                _lastClockStr = s;
+                document.getElementById('top-clock').innerText = s;
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+
+        // ─── HEADER: visible 5 min, hidden 5 min, alternating ───
+        let headerVisible = true;
+        setInterval(() => {
+            headerVisible = !headerVisible;
+            document.getElementById('main-header').classList.toggle('hidden', !headerVisible);
+        }, 5 * 60 * 1000);
+
+
+        // ─── TICKER BORDER: distinct color every 2 min for burn-in prevention (10 min full cycle) ───
+        const TICKER_COLORS = [
+            '#099afc', // blue
+            '#FFD600', // yellow
+            '#FF6D00', // orange
+            '#FF1744', // red
+            '#E040FB', // purple
+        ];
+        let tickerColorIndex = 0;
+
+
+        function nextTickerColor() {
+            tickerColorIndex = (tickerColorIndex + 1) % TICKER_COLORS.length;
+            document.getElementById('main-footer').style.borderTopColor = TICKER_COLORS[tickerColorIndex];
+        }
+
+
+        document.getElementById('main-footer').style.borderTopColor = TICKER_COLORS[tickerColorIndex];
+        setInterval(nextTickerColor, 175 * 1000);
+
+
+        // ─── DATA ───
+        let previousScores = {}; // key: eventId, value: score string for flash detection
+        let slideIndex = 0;
+        let slideTimer = null;
+        let lastTickerHtml = '';
+        let settingsVersion = null;
+        let _currentFont = '';
+
+        // Map of font display names → Google Fonts URL param
+        const FONT_MAP = {
+            'Barlow Condensed': 'Barlow+Condensed:wght@400;700;900&family=Barlow:wght@400;600',
+            'Bebas Neue':       'Bebas+Neue',
+            'Oswald':           'Oswald:wght@400;600;700',
+            'Roboto Condensed': 'Roboto+Condensed:wght@400;700',
+            'Anton':            'Anton',
+            'Exo 2':            'Exo+2:wght@400;700;900',
+            'Teko':             'Teko:wght@400;600;700',
+            'Saira Condensed':  'Saira+Condensed:wght@400;700;900',
+            'Rajdhani':         'Rajdhani:wght@400;600;700',
+            'Syncopate':        'Syncopate:wght@400;700',
+        };
+
+        function _applyFont(name) {
+            if (name === _currentFont) return;
+            _currentFont = name;
+            const param = FONT_MAP[name];
+            const cssFamily = `'${name}', sans-serif`;
+            if (param) {
+                document.getElementById('font-link').href =
+                    `https://fonts.googleapis.com/css2?family=${param}&display=swap`;
+            }
+            document.documentElement.style.setProperty('--font-primary', cssFamily);
+        }
+
+
+        function buildScoreText(awayScore, homeScore) {
+            return `${awayScore}-${homeScore}`;
+        }
+
+
+        async function updateData() {
+            try {
+                const res = await fetch('/api/data');
+                const data = await res.json();
+
+                // If settings changed since last poll, reload so the new config takes effect
+                if (settingsVersion && data.settings_updated_at && data.settings_updated_at !== settingsVersion) {
+                    window.location.reload();
+                    return;
+                }
+                settingsVersion = data.settings_updated_at || settingsVersion;
+
+                // Apply user-configured colors as CSS variables
+                const colors = data.colors || {};
+                const root = document.documentElement;
+                const liveCol  = colors.live  || '#00E676';
+                const finalCol = colors.final || '#FF1744';
+                root.style.setProperty('--live-color',         liveCol);
+                root.style.setProperty('--final-color',        finalCol);
+                root.style.setProperty('--flash-color',        colors.flash        || '#FFD600');
+                root.style.setProperty('--team-abbr-color',    colors.team_abbr    || '#ffffff');
+                root.style.setProperty('--league-label-color', colors.league_label || '#099afc');
+                root.style.setProperty('--ticker-base-color',  colors.ticker_base  || '#ffffff');
+                root.style.setProperty('--winner-color',       colors.winner       || liveCol);
+                root.style.setProperty('--loser-color',        colors.loser        || finalCol);
+                root.style.setProperty('--nascar-num-color',   colors.nascar_num   || '#FFD600');
+                root.style.setProperty('--gold',               data.header_color   || '#F5A800');
+                // Dark mode surfaces
+                root.style.setProperty('--bg',         colors.dark_bg       || '#080808');
+                root.style.setProperty('--card-bg',    colors.dark_card     || '#111111');
+                root.style.setProperty('--border',     colors.dark_border   || '#2a2a2a');
+                root.style.setProperty('--ticker-bg',  colors.dark_ticker_bg|| '#000000');
+                // Light mode surfaces (used via CSS color-mix)
+                root.style.setProperty('--light-bg',     colors.light_bg    || '#c4d6f0');
+                root.style.setProperty('--light-card',   colors.light_card  || '#ffffff');
+                root.style.setProperty('--light-border', colors.light_border|| '#ffffff');
+                // VS / pre-game text — switches automatically with theme
+                const isLight = data.theme === 'light';
+                root.style.setProperty('--vs-color', isLight
+                    ? (colors.light_vs   || '#445566')
+                    : (colors.dark_vs    || '#ffffff'));
+
+                // Font
+                _applyFont(data.font_primary || 'Barlow Condensed');
+
+                // Header
+                document.getElementById('display-name').innerText = data.display_name;
+                document.getElementById('display-name').style.color = data.header_color;
+                document.getElementById('top-clock').style.color = data.header_color;
+                document.getElementById('header-sep').style.color = data.header_color;
+
+
+                document.getElementById('weather').innerText = data.weather || '--';
+
+
+                // Apply theme and orientation from settings
+                document.body.classList.toggle('light', data.theme === 'light');
+                applyOrientation(data.cast_orientation || 'auto');
+
+
+                // ─── BUILD SLIDES ───
+                const stage = document.getElementById('main-stage');
+                let slidesHTML = `
+                    <div class="slide" id="logo-slide">
+                        <center><img src="/static/uploads/logo.png?t=${Date.now()}" onerror="this.style.display='none'"></center>
+                    </div>
+                `;
+
+
+                const flashIds = new Set();
+                (data.teams || []).forEach(t => {
+                    const key = `${t.away_name}@${t.home_name}`;
+                    const scoreNow = buildScoreText(t.away_score, t.home_score);
+                    let doFlash = false;
+                    if (!t.is_pre && previousScores[key] && previousScores[key] !== scoreNow) {
+                        doFlash = true;
+                        flashIds.add(key);
+                    }
+                    previousScores[key] = scoreNow;
+
+
+                    const stateClass = t.color_state; // 'pre', 'live', 'final'
+                    const flashAttr = doFlash ? 'data-flash="1"' : '';
+
+
+                    let centerContent = '';
+                    let statusContent = '';
+                    let statusVContent = '';  // vertical-mode center row
+
+
+                    // Winner/loser team-block classes for final games
+                    const awayBlockClass = (stateClass === 'final' && t.winner === 'away') ? 'win'
+                                         : (stateClass === 'final' && t.winner === 'home') ? 'loss' : '';
+                    const homeBlockClass = (stateClass === 'final' && t.winner === 'home') ? 'win'
+                                         : (stateClass === 'final' && t.winner === 'away') ? 'loss' : '';
+
+                    if (t.is_pre) {
+                        // Pre-game: show VS, date/time below
+                        centerContent = `<div class="score-display pre vs-label">VS</div>`;
+                        statusContent = `<div class="status-bar pre">${t.local_time || t.status}</div>`;
+                        statusVContent = `<div class="status-v pre">${t.local_time || t.status}</div>`;
+                    } else if (stateClass === 'live') {
+                        centerContent = `
+                            <div class="score-display live">${t.away_score} – ${t.home_score}</div>
+                        `;
+                        statusContent = `<div class="status-bar live"><span class="live-dot"></span>${t.status}</div>`;
+                        statusVContent = `<div class="status-v live"><span class="live-dot"></span>${t.status}</div>`;
+                    } else {
+                        // Final — split score into two spans so winner/loser can be colored
+                        const aPart = awayBlockClass || 'tie';
+                        const hPart = homeBlockClass || 'tie';
+                        centerContent = `
+                            <div class="score-display final">
+                                <span class="score-part ${aPart}">${t.away_score}</span>
+                                <span style="color:var(--final-color)"> – </span>
+                                <span class="score-part ${hPart}">${t.home_score}</span>
+                            </div>
+                        `;
+                        statusContent = `<div class="status-bar final">FINAL</div>`;
+                        statusVContent = `<div class="status-v final">FINAL</div>`;
+                    }
+
+
+                    const vEventTime = t.is_pre ? (t.local_time || t.status) : t.status;
+                    const vLiveDot = stateClass === 'live' ? '<span class="live-dot"></span>' : '';
+                    slidesHTML += `
+                        <div class="slide" ${flashAttr}>
+                            <div class="card ${stateClass} ${doFlash ? 'flash' : ''}" id="card-${key.replace(/[^a-z0-9]/gi,'_')}">
+                                ${stateClass === 'final' ? '<div class="final-badge">F</div>' : ''}
+                                <div class="league-tag">${t.league_label}</div>
+                                <div class="teams-grid">
+                                    <div class="team-block away ${awayBlockClass}">
+                                        <img src="${t.away_logo}" class="team-logo" onerror="this.style.display='none'">
+                                        <span class="team-abbr">${t.away_name}</span>
+                                        <span class="team-score-v ${stateClass}">${t.away_score}</span>
+                                    </div>
+                                    <div class="center-col">
+                                        ${centerContent}
+                                        ${statusVContent}
+                                    </div>
+                                    <div class="team-block home ${homeBlockClass}">
+                                        <img src="${t.home_logo}" class="team-logo" onerror="this.style.display='none'">
+                                        <span class="team-abbr">${t.home_name}</span>
+                                        <span class="team-score-v ${stateClass}">${t.home_score}</span>
+                                    </div>
+                                </div>
+                                <div class="v-event">
+                                    <span class="v-event-league">${t.league_label}</span>
+                                    <span class="v-event-time ${stateClass}">${vLiveDot}${vEventTime}</span>
+                                </div>
+                                ${statusContent}
+                            </div>
+                        </div>
+                    `;
+                });
+
+
+                // ─── NASCAR SLIDES ───
+                function ordSuffix(n) {
+                    const num = parseInt(n);
+                    if (isNaN(num)) return String(n);
+                    const v = Math.abs(num) % 100;
+                    return num + (['th','st','nd','rd'][(v-20)%10] || ['th','st','nd','rd'][v] || 'th');
+                }
+
+                (data.races || []).forEach(race => {
+                    const sc = race.color_state;
+                    const finalBadge = sc === 'final' ? '<div class="final-badge">F</div>' : '';
+                    const liveDot = sc === 'live' ? '<span class="live-dot"></span>' : '';
+                    const statusBar = `<div class="status-bar ${sc}">${liveDot}${race.status}</div>`;
+                    const favDriver = (race.drivers || []).find(d => d.is_fav);
+
+                    if (favDriver) {
+                        const place = ordSuffix(favDriver.pos);
+                        slidesHTML += `
+                            <div class="slide">
+                                <div class="card ${sc}" style="justify-content:center;align-items:center;text-align:center;gap:2vh;">
+                                    ${finalBadge}
+                                    <div class="league-tag">${race.league_label}</div>
+                                    <div class="nascar-number">#${favDriver.car}</div>
+                                    <div class="team-abbr" style="font-size:clamp(28px,7vw,90px);line-height:1;">${favDriver.name}</div>
+                                    <div class="score-display ${sc}" style="font-size:clamp(48px,14vw,180px);line-height:1;">${place}</div>
+                                    ${statusBar}
+                                </div>
+                            </div>`;
+                    }
+                });
+
+                // ─── GOLF SLIDES ───
+                (data.golf || []).forEach(golf => {
+                    const sc = golf.color_state;
+                    const finalBadge = sc === 'final' ? '<div class="final-badge">F</div>' : '';
+                    const liveDot = sc === 'live' ? '<span class="live-dot"></span>' : '';
+                    const statusBar = `<div class="status-bar ${sc}">${liveDot}${golf.status}</div>`;
+                    const favGolfer = (golf.golfers || []).find(g => g.is_fav);
+
+                    if (favGolfer) {
+                        slidesHTML += `
+                            <div class="slide">
+                                <div class="card ${sc}">
+                                    ${finalBadge}
+                                    <div class="league-tag">PGA</div>
+                                    <div class="teams-grid">
+                                        <div class="team-block away">
+                                            <span class="team-abbr" style="font-size:clamp(18px,min(6vw,6vh),72px);white-space:normal;text-align:center;line-height:1.1;">${favGolfer.name}</span>
+                                        </div>
+                                        <div class="center-col">
+                                            <div class="score-display ${sc}">${favGolfer.strokes}</div>
+                                            <div class="status-v ${sc}">${liveDot}${golf.status}</div>
+                                        </div>
+                                        <div class="team-block home">
+                                            <span class="golf-pos">${favGolfer.pos}</span>
+                                        </div>
+                                    </div>
+                                    <div class="v-event">
+                                        <span class="v-event-league">PGA</span>
+                                        <span class="v-event-time ${sc}">${liveDot}${golf.tournament_name}</span>
+                                    </div>
+                                    ${statusBar}
+                                </div>
+                            </div>`;
+                    }
+
+                    if ((golf.golfers || []).length > 0) {
+                        const rows = golf.golfers.map(g => `
+                            <div class="race-row ${g.is_fav ? 'race-row-fav' : ''}">
+                                <span class="race-pos">${g.pos}</span>
+                                <span class="race-name-cell">${g.name}${g.is_fav ? ' ★' : ''}</span>
+                                <span class="race-score-cell ${sc}">${g.strokes}</span>
+                            </div>`).join('');
+                        slidesHTML += `
+                            <div class="slide">
+                                <div class="card ${sc}">
+                                    ${finalBadge}
+                                    <div class="league-tag">PGA — ${golf.tournament_name}</div>
+                                    <div class="race-leaderboard">${rows}</div>
+                                    <div class="v-event">
+                                        <span class="v-event-league">PGA</span>
+                                        <span class="v-event-time ${sc}">${liveDot}${golf.status}</span>
+                                    </div>
+                                    ${statusBar}
+                                </div>
+                            </div>`;
+                    }
+                });
+
+                // ─── INTERLEAVE SPECIALS + LOCAL SCHEDULE ───
+                // Insert specials evenly between game cards
+                const specials = [
+                    ...(data.specials || []),
+                    ...(data.local_schedule_items || []),
+                ];
+                if (specials.length) {
+                    // Split slidesHTML into logo slide + game slides, then weave specials in
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(`<div>${slidesHTML}</div>`, 'text/html');
+                    const allSlides = [...doc.body.firstChild.children];
+                    const logoSlide = allSlides.shift(); // always first
+                    const gameSlides = allSlides;
+
+
+                    const step = gameSlides.length > 0
+                        ? Math.max(1, Math.ceil(gameSlides.length / (specials.length + 1)))
+                        : 1;
+
+
+                    specials.forEach((sp, i) => {
+                        const insertAt = Math.min((i + 1) * step, gameSlides.length);
+                        const color = sp.color || '#F5A800';
+                        const specialEl = document.createElement('div');
+                        specialEl.className = 'slide';
+                        if (sp.type === 'schedule') {
+                            const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
+                            specialEl.innerHTML = `
+                                <div class="card pre">
+                                    <div class="league-tag">${sp.label}</div>
+                                    <div class="teams-grid">
+                                        <div class="team-block away"><span class="team-abbr">${sp.away_team}</span></div>
+                                        <div class="center-col">
+                                            <div class="score-display pre vs-label">VS</div>
+                                        </div>
+                                        <div class="team-block home"><span class="team-abbr">${sp.home_team}</span></div>
+                                    </div>
+                                    <div class="v-event">
+                                        <span class="v-event-league">${sp.label}</span>
+                                        ${dt ? `<span class="v-event-time pre">${dt}</span>` : ''}
+                                    </div>
+                                    ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
+                                </div>`;
+                        } else if (sp.type === 'rss') {
+                            const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
+                            const logoHtml = sp.logo ? `<img src="${sp.logo}">` : '';
+                            const topTag = sp.tag || 'CUSTOM';
+                            specialEl.innerHTML = `
+                                <div class="card pre rss-card">
+                                    <div class="league-tag">${topTag}</div>
+                                    <div class="rss-body">
+                                        <div class="rss-logo-col">
+                                            ${logoHtml}
+                                            <div class="rss-label">${sp.label}</div>
+                                        </div>
+                                        <div class="rss-text-col">
+                                            <div class="rss-event">${sp.title}</div>
+                                            ${sp.body ? `<div class="rss-subevent">${sp.body}</div>` : ''}
+                                        </div>
+                                    </div>
+                                    ${dt ? `<div class="v-event"><span class="v-event-time pre">${dt}</span></div>` : ''}
+                                    ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
+                                </div>`;
+                        } else if (sp.type === 'image' && sp.image) {
+                            specialEl.innerHTML = `
+                                <div class="card special-card" style="border-color:${color};padding:0;overflow:hidden;">
+                                    <img src="${sp.image}" style="width:100%;height:100%;object-fit:contain;">
+                                </div>`;
+                        } else {
+                            specialEl.innerHTML = `
+                                <div class="card special-card" style="border-color:${color}">
+                                    <div class="special-title" style="color:${color}">${sp.title}</div>
+                                    ${sp.body ? `<div class="special-body">${sp.body}</div>` : ''}
+                                </div>`;
+                        }
+                        gameSlides.splice(insertAt + i, 0, specialEl);
+                    });
+
+
+                    slidesHTML = [logoSlide, ...gameSlides].map(el => el.outerHTML).join('');
+                }
+
+
+                const savedIndex = slideIndex;
+                stage.innerHTML = slidesHTML;
+                startSlideshow(savedIndex);
+
+
+                // ─── BUILD TICKER ───
+                let tickerHtml = '';
+                (data.ticker_parts || []).forEach(section => {
+                    tickerHtml += `<span class="tick-item"><span class="tick-label">${section.label}</span></span>`;
+                    section.games.forEach((g, i) => {
+                        const flash = flashIds.has(`${g.away}@${g.home}`);
+                        const cls = flash ? 'flash-yellow' : g.color_state;
+                        let gameText;
+                        if (g.color_state === 'final' && g.winner && g.winner !== 'tie') {
+                            const awayTag = g.winner === 'away'
+                                ? `<span style="font-weight:900">${g.away}</span>`
+                                : g.away;
+                            const homeTag = g.winner === 'home'
+                                ? `<span style="font-weight:900">${g.home}</span>`
+                                : g.home;
+                            gameText = `${awayTag} ${g.away_score}  ${homeTag} ${g.home_score}  F`;
+                        } else {
+                            gameText = g.text;
+                        }
+                        tickerHtml += `<span class="tick-item ${cls}">${gameText}</span>`;
+                        if (i < section.games.length - 1) tickerHtml += `<span class="tick-sep">·</span>`;
+                    });
+                    tickerHtml += `<span class="tick-sep tick-sep">  ///  </span>`;
+                });
+
+
+                (data.local_schedule_items || []).filter(i => i.type === 'schedule').forEach(item => {
+                    const dt = [item.date, item.time].filter(Boolean).join('   ');
+                    tickerHtml += `<span class="tick-item"><span class="tick-label">${item.label}</span>${item.away_team} @ ${item.home_team}${dt ? ' | ' + dt : ''}</span><span class="tick-sep">  ///  </span>`;
+                });
+
+                if (tickerHtml && tickerHtml !== lastTickerHtml) {
+                    lastTickerHtml = tickerHtml;
+                    document.getElementById('ticker-text').innerHTML = tickerHtml;
+                    resetTickerAnimation();
+                }
+
+
+            } catch(e) { console.error('Data update error:', e); }
+        }
+
+
+        function startSlideshow(resumeIndex) {
+            const slides = document.querySelectorAll('.slide');
+            if (!slides.length) return;
+            slideIndex = (resumeIndex != null) ? Math.min(resumeIndex, slides.length - 1) : 0;
+            slides[slideIndex].classList.add('active');
+            if (slideTimer) clearInterval(slideTimer);
+            slideTimer = setInterval(() => {
+                slides[slideIndex].classList.remove('active');
+                slideIndex = (slideIndex + 1) % slides.length;
+                slides[slideIndex].classList.add('active');
+            }, 13000);
+        }
+
+
+        function resetTickerAnimation() {
+            const ticker = document.getElementById('ticker-text');
+            const PX_PER_SEC = 120;
+            ticker.style.animation = 'none';
+            ticker.offsetWidth; // force reflow so removing animation takes effect
+            const duration = ticker.scrollWidth / PX_PER_SEC;
+            ticker.style.animation = `scroll ${duration}s linear infinite`;
+        }
+
+
+        updateData();
+        setInterval(updateData, 30 * 1000);
+    </script>
+</body>
+</html>
