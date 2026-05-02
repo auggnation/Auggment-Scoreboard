@@ -29,7 +29,7 @@
 3. **Run the Installer**:
    ```bash
    chmod +x install.sh
-   sudo ./install.sh
+   sudo ./install.sh```
 
    Choose Your Mode:
 
@@ -45,14 +45,15 @@ On PC-based Linux (x86_64), the script prefers Google Chrome for kiosk stability
 If Chrome fails to install:
 Manual Download: If the installer cannot find the .deb file, download it manually:
 
-Bash
-wget [https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb](https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb)
+```bash
+wget [https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb](https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb)```
 Placement: Ensure the .deb file is in the same folder as install.sh before running the installer.
 
 Dependency Fix: If you see "broken packages," run:
 
-Bash
-sudo apt --fix-broken install
+```bash
+sudo apt --fix-broken install```
+
 Fallback: If Chrome is not found or fails, the install.sh script automatically falls back to chromium-browser.
 
 How It Works & Tips
