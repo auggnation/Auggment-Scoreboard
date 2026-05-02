@@ -31,13 +31,13 @@
    chmod +x install.sh
    sudo ./install.sh```
 
-   Choose Your Mode:
+Choose your Mode: 
 
 Server: No display. Acts as the data hub.
 
 Kiosk: A display-only client that points to a server.
 
-Combined: Runs both backend and display on one machine.
+Combined: Runs both backend and display on one machine. (reccomended no matter what)
 
 Google Chrome Troubleshooting (x86_64)
 On PC-based Linux (x86_64), the script prefers Google Chrome for kiosk stability, while Raspberry Pi (ARM) always uses Chromium.
@@ -45,30 +45,47 @@ On PC-based Linux (x86_64), the script prefers Google Chrome for kiosk stability
 If Chrome fails to install:
 Manual Download: If the installer cannot find the .deb file, download it manually:
 
-```bash
-wget [https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb](https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb)```
+Google Chrome Troubleshooting (x86_64)
+
+On PC-based Linux (x86_64), the script prefers Google Chrome for kiosk stability, while Raspberry Pi (ARM) always uses Chromium.
+
+If Chrome fails to install:
+
+Manual Download: If the installer cannot find the .deb file, download it manually:
+
+wget [https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb](https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb)
+
+
 Placement: Ensure the .deb file is in the same folder as install.sh before running the installer.
 
 Dependency Fix: If you see "broken packages," run:
 
-```bash
-sudo apt --fix-broken install```
+sudo apt --fix-broken install
+
 
 Fallback: If Chrome is not found or fails, the install.sh script automatically falls back to chromium-browser.
 
 How It Works & Tips
+
 Pairing Kiosks
-If you are running in Kiosk mode, go to the Settings page on your Server to generate a "Pairing Code". Enter that code on the Kiosk's startup screen to securely link the Kiosk to the Server's data.   
+
+If you are running in Kiosk mode, go to the Settings page on your Server to generate a "Pairing Code". Enter that code on the Kiosk's startup screen to securely link the Kiosk to the Server's data.
 
 Local Schedules
-To add your local school's games, go to Settings > Local Schedule. Paste the URL of the school's athletic page or MaxPreps link; the app will attempt to detect the feed type (Thrillshare, MaxPreps, or RSS) automatically.   
+
+To add your local school's games, go to Settings > Local Schedule. Paste the URL of the school's athletic page or MaxPreps link; the app will attempt to detect the feed type (Thrillshare, MaxPreps, or RSS) automatically.
 
 Display Control
-The app uses xset to control the TV backlight.  Ensure your TV supports CEC or DPMS over HDMI for the "Power On/Off" features to work correctly. The start_kiosk.sh script handles "uncluttering" the mouse cursor so it disappears from the screen.  
+
+The app uses xset to control the TV backlight. Ensure your TV supports CEC or DPMS over HDMI for the "Power On/Off" features to work correctly. The start_kiosk.sh script handles "uncluttering" the mouse cursor so it disappears from the screen.
 
 Troubleshooting
 
-Black Screen on Boot: Check the service status with systemctl status kiosk.service.  Ensure your graphics drivers are installed if it cannot open the display.  
+Black Screen on Boot: Check the service status with systemctl status kiosk.service. Ensure your graphics drivers are installed if it cannot open the display.
+
+Data Not Updating: Check the backend logs with journalctl -u scoreboard -f and verify the machine has internet access to reach ESPN’s APIs.
+
+Sudo Errors: The app requires specific NOPASSWD entries in /etc/sudoers.d/scoreboard to control the display and services from the web UI. These are created automatically by the installer.
 
 
 Data Not Updating: Check the backend logs with journalctl -u scoreboard -f and verify the machine has internet access to reach ESPN’s APIs.   
