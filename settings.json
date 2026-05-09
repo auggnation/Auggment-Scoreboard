@@ -1,0 +1,122 @@
+{
+  "device_mode": "server",
+  "server_enable_display": true,
+  "port": 5000,
+  "display_name": "EvilEx's",
+  "header_color": "#940000",
+  "colors": {
+    "live": "#00e676",
+    "final": "#ffdd00",
+    "flash": "#50479a",
+    "team_abbr": "#adadad",
+    "league_label": "#099afc",
+    "ticker_base": "#878787",
+    "winner": "#00e676",
+    "loser": "#ff1744",
+    "tie_score": "#ffd600",
+    "fav_abbr": "#ff9500",
+    "fav_score": "#f94343",
+    "nascar_num": "#ff0000",
+    "dark_bg": "#000000",
+    "dark_card": "#000000",
+    "dark_border": "#2a2a2a",
+    "dark_vs": "#a8fffe",
+    "dark_ticker_bg": "#000000",
+    "light_bg": "#c4d6f0",
+    "light_card": "#ffffff",
+    "light_border": "#b4c2fe",
+    "light_vs": "#445566"
+  },
+  "font_primary": "Barlow Condensed",
+  "city": "Auburn, NE",
+  "timezone": "America/Chicago",
+  "cast_orientation": "auto",
+  "theme": "dark",
+  "leagues": [
+    "football/nfl",
+    "hockey/nhl",
+    "soccer/usa.1",
+    "soccer/usa.nwsl",
+    "soccer/eng.1",
+    "soccer/esp.1",
+    "soccer/ger.1",
+    "football/college-football",
+    "basketball/mens-college-basketball",
+    "baseball/college-baseball",
+    "softball/college-softball",
+    "volleyball/womens-college-volleyball",
+    "soccer/usa.usl.l1",
+    "soccer/fifa.world",
+    "soccer/fifa.wwc",
+    "racing/nascar-cup"
+  ],
+  "teams": [
+    "football/college-football:OKST",
+    "soccer/usa.1:SKC",
+    "soccer/usa.usl.l1:OMA",
+    "hockey/nhl:PIT",
+    "football/college-football:NEB",
+    "basketball/mens-college-basketball:NEB",
+    "baseball/college-baseball:NEB",
+    "softball/college-softball:NEB",
+    "volleyball/womens-college-volleyball:NEB",
+    "soccer/fifa.world:USA",
+    "soccer/usa.nwsl:KC",
+    "soccer/eng.2:WXM",
+    "football/nfl:KC"
+  ],
+  "nascar_favorites": [
+    "Chase Elliott"
+  ],
+  "indycar_favorites": [],
+  "f1_favorites": [],
+  "golf_favorites": [],
+  "league_conferences": {
+    "football/college-football": [
+      "5",
+      "4"
+    ],
+    "basketball/mens-college-basketball": [
+      "7",
+      "8"
+    ],
+    "baseball/college-baseball": [
+      "48",
+      "44"
+    ],
+    "softball/college-softball": [
+      "49",
+      "45"
+    ],
+    "volleyball/womens-college-volleyball": [
+      "54",
+      "69"
+    ]
+  },
+  "admin_credentials": {
+    "username": "admin",
+    "password": "atsi"
+  },
+  "specials": [],
+  "local_schedule": {
+    "rss_feeds": [],
+    "items": []
+  },
+  "schedule": {
+    "shutdown": {
+      "enabled": true,
+      "time": "23:00"
+    },
+    "startup": {
+      "enabled": true,
+      "time": "07:00"
+    }
+  },
+  "update": {
+    "source_url": "https://api.github.com/repos/auggnation/Auggment-Scoreboard/releases/latest",
+    "auto_check": true,
+    "auto_apply": true,
+    "check_hours": 6
+  },
+  "last_saved": "2026-05-09T03:12:32.648152+00:00"
+}
