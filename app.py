@@ -1,5 +1,5 @@
 import os, json, requests, subprocess, pytz, threading, time as time_module, uuid, random, string
-import zipfile, io, re, shutil, tempfile
+import zipfile, io, shutil, tempfile
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -366,10 +366,91 @@ def save_kiosks(kiosks):
 
 # ─── ESPN CACHE ───
 
+_NASCAR_SCHEDULE_CACHE = {}  # year -> {race_id -> {race_name, race_date}}
+
+def _fetch_nascar_com_events():
+    """Fetch live NASCAR Cup race data from NASCAR.com and return ESPN-compatible event list."""
+    live = requests.get('https://cf.nascar.com/cacher/live/live-feed.json', timeout=6,
+                        headers={'User-Agent': 'Mozilla/5.0'}).json()
+    vehicles = live.get('vehicles', [])
+    if not vehicles:
+        return []
+
+    flag_state = live.get('flag_state', 0)
+    lap = live.get('lap_number', 0)
+    laps_in_race = live.get('laps_in_race', 0)
+    race_id = live.get('race_id')
+
+    # Race is complete if laps done, or flag is checkered (4) or any post-race flag
+    race_complete = (laps_in_race > 0 and lap >= laps_in_race) or flag_state == 4
+    if race_complete:
+        state = 'post'
+        status_detail = 'Final'
+    elif flag_state == 0 and lap == 0:
+        state = 'pre'
+        status_detail = 'Scheduled'
+    else:
+        state = 'in'
+        flag_label = {1: 'Green', 2: 'Yellow', 3: 'Red', 8: 'Caution', 9: 'Debris'}.get(flag_state, '')
+        status_detail = f"Lap {lap} of {laps_in_race}" + (f" ({flag_label})" if flag_label else "")
+
+    # Get race info (name + date) from schedule cache
+    year = datetime.now().year
+    if year not in _NASCAR_SCHEDULE_CACHE:
+        try:
+            sched = requests.get(f'https://cf.nascar.com/cacher/{year}/1/race_list_basic.json',
+                                 timeout=5, headers={'User-Agent': 'Mozilla/5.0'}).json()
+            _NASCAR_SCHEDULE_CACHE[year] = {
+                r['race_id']: {'name': r.get('race_name', 'NASCAR Cup Race'),
+                               'date': r.get('race_date') or r.get('date_scheduled', '')}
+                for r in sched if 'race_id' in r
+            }
+        except Exception:
+            _NASCAR_SCHEDULE_CACHE[year] = {}
+
+    race_info = _NASCAR_SCHEDULE_CACHE.get(year, {}).get(race_id, {})
+    race_name = race_info.get('name', 'NASCAR Cup Race')
+    race_date_str = race_info.get('date', '') or datetime.now(timezone.utc).isoformat()
+
+    sorted_vehicles = sorted(
+        [v for v in vehicles if v.get('running_position')],
+        key=lambda v: v['running_position']
+    )
+
+    competitors = []
+    for v in sorted_vehicles:
+        drv = v.get('driver', {})
+        full_name = drv.get('full_name', '') or f"{drv.get('first_name', '')} {drv.get('last_name', '')}".strip()
+        last = drv.get('last_name', '')
+        first_init = (drv.get('first_name', '') or '')[:1]
+        short_name = f"{first_init}. {last}" if first_init and last else full_name
+        competitors.append({
+            'order': v['running_position'],
+            'score': str(v['running_position']),
+            'athlete': {
+                'displayName': full_name,
+                'shortName': short_name,
+                'jersey': str(v.get('vehicle_number', '')),
+            },
+        })
+
+    _FLAG_LABELS = {1:'Green',2:'Yellow',3:'Red',4:'Checkered',8:'Caution',9:'Debris',0:'Pre-Race'}
+    return [{
+        'date': race_date_str,  # actual race date so date-window filtering works
+        'name': race_name,
+        'shortName': race_name,
+        'status': {'type': {'state': state, 'shortDetail': status_detail}},
+        'competitions': [{'competitors': competitors}],
+        '_nascar_flag_label': _FLAG_LABELS.get(flag_state, '') if not race_complete else 'Checkered',
+        '_nascar_lap': lap,
+        '_nascar_laps_in_race': laps_in_race,
+    }]
+
+
 def _fetch_league_raw(path, league_conferences):
     sport, league = ESPN_API_PATHS.get(path, (path.split('/')[0], path.split('/')[-1]))
     now = datetime.now()
-    lookahead = 7 if path in EXTENDED_LOOKAHEAD_LEAGUES else 1
+    lookahead = 6 if path in EXTENDED_LOOKAHEAD_LEAGUES else 1
     date_str = f"{now.strftime('%Y%m%d')}-{(now + timedelta(days=lookahead)).strftime('%Y%m%d')}"
     base_host = "site.web.api.espn.com" if path in ESPN_WEB_API_LEAGUES else "site.api.espn.com"
     if path in ESPN_NO_DATE_LEAGUES:
@@ -380,7 +461,20 @@ def _fetch_league_raw(path, league_conferences):
     conf_id = ','.join(conf_val) if isinstance(conf_val, list) else conf_val
     if conf_id:
         url += f"{'?' if '?' not in url else '&'}groups={conf_id}"
-    return requests.get(url, timeout=8).json().get('events', [])
+    r = requests.get(url, timeout=8)
+    events = r.json().get('events', []) if r.ok else []
+
+    # Fall back to NASCAR.com live feed if ESPN has no data
+    if not events and path == 'racing/nascar-cup':
+        try:
+            events = _fetch_nascar_com_events()
+        except Exception as e:
+            print(f"[cache] nascar.com fallback: {e}")
+
+    try:
+        return sorted(events, key=lambda e: e.get('date', ''))
+    except Exception:
+        return events
 
 
 def _refresh_espn_cache():
@@ -490,14 +584,24 @@ def _build_local_schedule_items(settings, tz_str):
     for entry in ls.get('items', []):
         if not entry.get('enabled', True):
             continue
+        date_raw = entry.get('date', '')
+        time_raw = entry.get('time', '')
+        event_iso = ''
+        if date_raw:
+            try:
+                parsed = dateutil_parser.parse(f"{date_raw} {time_raw}".strip())
+                event_iso = parsed.isoformat()
+            except Exception:
+                pass
         items.append({
             'type': 'schedule',
             'label': entry.get('label', 'LOCAL SPORTS'),
             'away_team': entry.get('away_team', ''),
             'home_team': entry.get('home_team', ''),
-            'date': entry.get('date', ''),
-            'time': entry.get('time', ''),
+            'date': date_raw,
+            'time': time_raw,
             'location': entry.get('location', ''),
+            'event_iso': event_iso,
         })
     # Support both new multi-feed format and legacy single-feed fields
     rss_feeds = ls.get('rss_feeds', [])
@@ -533,7 +637,7 @@ def _build_local_schedule_items(settings, tz_str):
     return items
 
 
-import re as _re
+import re
 from urllib.parse import urlparse as _urlparse, urljoin as _urljoin
 
 def _resolve_feed(url):
@@ -544,7 +648,7 @@ def _resolve_feed(url):
     # MaxPreps school pages
     if 'maxpreps.com' in url:
         # Normalise to the /events/ page
-        events_url = _re.sub(r'(maxpreps\.com/[^/]+/[^/]+/[^/]+)/.*', r'\1/events/', url)
+        events_url = re.sub(r'(maxpreps\.com/[^/]+/[^/]+/[^/]+)/.*', r'\1/events/', url)
         if not events_url.endswith('/events/'):
             events_url = url.rstrip('/') + '/events/'
         return events_url, 'maxpreps'
@@ -575,25 +679,25 @@ def _resolve_feed(url):
         base = f"{parsed.scheme}://{parsed.netloc}"
 
         # <link type="application/rss+xml" href="...">
-        rss_link = _re.search(r'<link[^>]+type=["\']application/(rss|atom)\+xml["\'][^>]*href=["\']([^"\']+)["\']', text, _re.I)
+        rss_link = re.search(r'<link[^>]+type=["\']application/(rss|atom)\+xml["\'][^>]*href=["\']([^"\']+)["\']', text, re.I)
         if not rss_link:
-            rss_link = _re.search(r'<link[^>]+href=["\']([^"\']+)["\'][^>]*type=["\']application/(rss|atom)\+xml["\']', text, _re.I)
+            rss_link = re.search(r'<link[^>]+href=["\']([^"\']+)["\'][^>]*type=["\']application/(rss|atom)\+xml["\']', text, re.I)
         if rss_link:
             href = rss_link.group(2) if rss_link.lastindex >= 2 else rss_link.group(1)
             return _urljoin(base, href), 'rss'
 
         # Thrillshare API URL embedded in page JS
-        ts_match = _re.search(r'(https://thrillshare\.com/api/v\d+/o/\d+/cms/events[^"\'\\s<>]+)', text)
+        ts_match = re.search(r'(https://thrillshare\.com/api/v\d+/o/\d+/cms/events[^"\'\\s<>]+)', text)
         if ts_match:
             return ts_match.group(1).rstrip('\\'), 'thrillshare'
-        org_match = _re.search(r'/api/v4/o/(\d+)/cms/events\?slug=([\w-]+)', text)
+        org_match = re.search(r'/api/v4/o/(\d+)/cms/events\?slug=([\w-]+)', text)
         if org_match:
             return f"https://thrillshare.com/api/v4/o/{org_match.group(1)}/cms/events?slug={org_match.group(2)}", 'thrillshare'
 
         # iCal link in page (e.g. href="...ics" or webcal://)
-        ical_href = _re.search(r'href=["\']([^"\']*\.ics[^"\']*)["\']', text, _re.I)
+        ical_href = re.search(r'href=["\']([^"\']*\.ics[^"\']*)["\']', text, re.I)
         if not ical_href:
-            ical_href = _re.search(r'href=["\']webcal://([^"\']+)["\']', text, _re.I)
+            ical_href = re.search(r'href=["\']webcal://([^"\']+)["\']', text, re.I)
             if ical_href:
                 return 'https://' + ical_href.group(1), 'ical'
         if ical_href:
@@ -686,7 +790,7 @@ def _parse_ical_feed(url, label, logo, out, tz_str='America/Chicago'):
                 dtstart_raw = event.get('dtstart', '')
                 if dtstart_raw:
                     try:
-                        dtstart = _re.sub(r'^[^:]+:', '', dtstart_raw)  # strip TZID param
+                        dtstart = re.sub(r'^[^:]+:', '', dtstart_raw)  # strip TZID param
                         if 'T' in dtstart:
                             naive = datetime.strptime(dtstart.rstrip('Z'), '%Y%m%dT%H%M%S')
                             event_dt = tz.localize(naive) if not dtstart.endswith('Z') else pytz.utc.localize(naive).astimezone(tz)
@@ -733,7 +837,7 @@ def _parse_maxpreps_feed(url, label, logo, out, tz_str='America/Chicago'):
 
     headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     res = requests.get(url, timeout=10, headers=headers)
-    m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>({.*?})</script', res.text, _re.S)
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>({.*?})</script', res.text, re.S)
     if not m:
         print(f"[maxpreps] No __NEXT_DATA__ found at {url}")
         return
@@ -858,12 +962,12 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                         status_detail = event['status']['type']['shortDetail']
                         try:
                             event_local_date = dateutil_parser.parse(event['date']).astimezone(pytz.timezone(tz_str)).date()
-                            is_today = (event_local_date == today_local)
+                            in_window = (event_local_date == today_local)
                         except Exception:
-                            is_today = True
+                            in_window = True
 
-                        if not is_today:
-                            continue  # only show on race day
+                        if not in_window:
+                            continue  # only show on race day itself
 
                         color_state = 'live' if state == 'in' else ('final' if state == 'post' else 'pre')
                         competitors = event['competitions'][0].get('competitors', [])
@@ -906,17 +1010,17 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                             "status": status_detail,
                             "is_pre": state == 'pre',
                             "drivers": drivers,
+                            "flag_label": event.get('_nascar_flag_label', ''),
+                            "lap": event.get('_nascar_lap', 0),
+                            "laps_in_race": event.get('_nascar_laps_in_race', 0),
                         })
 
                         if drivers:
-                            fav_driver = next((d for d in drivers if d['is_fav']), None)
-                            if fav_driver:
-                                non_fav = [d for d in drivers[:10] if not d['is_fav']]
-                                ticker_drivers = [fav_driver] + non_fav[:9]
-                            else:
-                                ticker_drivers = drivers[:10]
-                            top10_text = '  '.join(
-                                f"{d['pos']} {d['name']}{' #' + str(d['car']) if d.get('car') else ''}"
+                            # Top 10 by position order; mark fav with ★
+                            ticker_drivers = sorted(drivers, key=lambda d: int(d['pos']) if str(d['pos']).isdigit() else 999)[:10]
+                            sep = '&nbsp;&nbsp;&nbsp;&nbsp;'
+                            top10_text = sep.join(
+                                (f"{d['pos']}&nbsp;&nbsp;{'★ ' if d['is_fav'] else ''}{d['name']}&nbsp;&nbsp;#{d['car']}" if d.get('car') else f"{d['pos']}&nbsp;&nbsp;{'★ ' if d['is_fav'] else ''}{d['name']}")
                                 for d in ticker_drivers
                             )
                             ticker_parts.append({
@@ -937,12 +1041,12 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                         status_detail = event['status']['type']['shortDetail']
                         try:
                             event_local_date = dateutil_parser.parse(event['date']).astimezone(pytz.timezone(tz_str)).date()
-                            is_today = (event_local_date == today_local)
+                            in_window = (fav_min_date <= event_local_date <= today_local)
                         except Exception:
-                            is_today = True
+                            in_window = True
 
-                        if not is_today:
-                            continue  # only show on tournament days
+                        if not in_window:
+                            continue  # only show on active tournament days or until 11 AM next day
 
                         color_state = 'live' if state == 'in' else ('final' if state == 'post' else 'pre')
                         competitors = event['competitions'][0].get('competitors', [])
@@ -991,8 +1095,9 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                         })
 
                         if golfers:
-                            top10_text = '  '.join(
-                                f"{g['pos']} {g['name']} ({g['strokes']})"
+                            sep = '&nbsp;&nbsp;&nbsp;&nbsp;'
+                            top10_text = sep.join(
+                                f"{g['pos']}&nbsp;&nbsp;{g['name']}&nbsp;&nbsp;({g['strokes']})"
                                 for g in golfers
                             )
                             ticker_parts.append({
@@ -1034,7 +1139,11 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                     elif state == 'in':
                         tick_text = f"{a_abbr} {a_score}  {h_abbr} {h_score}  ({status_detail})"
                         color_state = 'live'
-                        winner = None
+                        try:
+                            as_int, hs_int = int(a_score), int(h_score)
+                            winner = 'away' if as_int > hs_int else ('home' if hs_int > as_int else 'tie')
+                        except Exception:
+                            winner = None
                     else:
                         tick_text = f"{a_abbr} {a_score}  {h_abbr} {h_score}  F"
                         color_state = 'final'
@@ -1051,10 +1160,9 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                             "away_score": a_score, "home_score": h_score, "winner": winner,
                         })
 
-                    is_fav = (
-                        f"{path.lower()}:{h_abbr.upper()}" in fav_set or
-                        f"{path.lower()}:{a_abbr.upper()}" in fav_set
-                    )
+                    away_is_fav = f"{path.lower()}:{a_abbr.upper()}" in fav_set
+                    home_is_fav = f"{path.lower()}:{h_abbr.upper()}" in fav_set
+                    is_fav = away_is_fav or home_is_fav
                     game_key = f"{path}:{a_abbr}@{h_abbr}"
                     if is_fav and event_local_date >= fav_min_date and game_key not in fav_card_keys:
                         fav_card_keys.add(game_key)
@@ -1067,6 +1175,8 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                             "status": status_detail, "local_time": l_time_str,
                             "is_pre": state == 'pre', "color_state": color_state,
                             "winner": winner,
+                            "away_is_fav": away_is_fav,
+                            "home_is_fav": home_is_fav,
                         })
                 except Exception as e:
                     print(f"Event error in {path}: {e}")
@@ -1098,6 +1208,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
         "font_primary": settings.get('font_primary', 'Barlow Condensed'),
         "cache_updated_at": _espn_cache.get("updated_at"),
         "settings_updated_at": settings.get('last_saved', ''),
+        "app_version": _read_version(),
     }
 
 
@@ -1384,6 +1495,199 @@ def backend_restart():
         return jsonify({"error": str(e)}), 500
 
 
+# ─── WIFI MANAGEMENT ───
+
+def _wifi_tool():
+    """Returns ('nmcli', iface) or ('wpa', iface) or (None, None)."""
+    try:
+        r = subprocess.run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device'],
+                           capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            p = line.split(':')
+            if len(p) >= 2 and p[1] == 'wifi':
+                return 'nmcli', p[0]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    try:
+        for iface in sorted(os.listdir('/sys/class/net')):
+            if os.path.isdir(f'/sys/class/net/{iface}/wireless'):
+                return 'wpa', iface
+    except Exception:
+        pass
+    return None, None
+
+
+@app.route('/api/wifi/status')
+@login_required
+def wifi_status():
+    tool, iface = _wifi_tool()
+    if not iface:
+        return jsonify({'available': False, 'error': 'No wireless interface found'})
+    info = {'available': True, 'iface': iface, 'connected': False, 'ssid': '', 'ip': '', 'signal': 0}
+    try:
+        if tool == 'nmcli':
+            r = subprocess.run(['nmcli', '-t', '-f', 'DEVICE,STATE,CONNECTION', 'device', 'status'],
+                               capture_output=True, text=True, timeout=5)
+            for line in r.stdout.splitlines():
+                p = line.split(':')
+                if p[0] == iface:
+                    info['connected'] = p[1] == 'connected'
+                    info['ssid'] = p[2] if len(p) > 2 else ''
+                    break
+            if info['connected']:
+                r2 = subprocess.run(['nmcli', '-t', '-f', 'IP4.ADDRESS', 'device', 'show', iface],
+                                    capture_output=True, text=True, timeout=5)
+                for line in r2.stdout.splitlines():
+                    if 'IP4.ADDRESS' in line:
+                        info['ip'] = line.split(':')[-1].split('/')[0]
+                        break
+                r3 = subprocess.run(['nmcli', '-t', '-f', 'ACTIVE,SIGNAL,SSID', 'device', 'wifi'],
+                                    capture_output=True, text=True, timeout=5)
+                for line in r3.stdout.splitlines():
+                    p = line.split(':')
+                    if p[0] == 'yes' and len(p) >= 3:
+                        try:
+                            info['signal'] = int(p[1])
+                        except ValueError:
+                            pass
+                        break
+        else:
+            r = subprocess.run(['cat', f'/sys/class/net/{iface}/operstate'],
+                               capture_output=True, text=True, timeout=3)
+            info['connected'] = r.stdout.strip() == 'up'
+            if info['connected']:
+                r2 = subprocess.run(['ip', '-4', 'addr', 'show', iface],
+                                    capture_output=True, text=True, timeout=3)
+                for line in r2.stdout.splitlines():
+                    if 'inet ' in line:
+                        info['ip'] = line.strip().split()[1].split('/')[0]
+                        break
+                try:
+                    with open(f'/proc/net/wireless') as f:
+                        for line in f:
+                            if iface in line:
+                                parts = line.split()
+                                info['signal'] = int(float(parts[3].rstrip('.')))
+                except Exception:
+                    pass
+    except Exception as e:
+        info['error'] = str(e)
+    return jsonify(info)
+
+
+@app.route('/api/wifi/scan')
+@login_required
+def wifi_scan():
+    tool, iface = _wifi_tool()
+    if not iface:
+        return jsonify({'networks': [], 'error': 'No wireless interface found'})
+    networks = []
+    try:
+        if tool == 'nmcli':
+            r = subprocess.run(
+                ['sudo', 'nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
+                 'device', 'wifi', 'list', '--rescan', 'yes'],
+                capture_output=True, text=True, timeout=20)
+            for line in r.stdout.splitlines():
+                p = line.split(':')
+                if len(p) >= 4 and p[0].strip():
+                    try:
+                        sig = int(p[1])
+                    except ValueError:
+                        sig = 0
+                    networks.append({'ssid': p[0], 'signal': sig,
+                                     'security': p[2] or 'Open', 'active': p[3] == 'yes'})
+        else:
+            r = subprocess.run(['sudo', 'iwlist', iface, 'scan'],
+                               capture_output=True, text=True, timeout=15)
+            ssid, sig, sec = '', 0, 'Open'
+            for line in r.stdout.splitlines():
+                line = line.strip()
+                if 'ESSID:' in line:
+                    ssid = line.split('ESSID:')[1].strip().strip('"')
+                elif 'Signal level=' in line:
+                    try:
+                        sig_str = line.split('Signal level=')[1].split(' ')[0]
+                        sig_val = int(sig_str.split('/')[0])
+                        sig = sig_val + 100 if sig_val < 0 else sig_val
+                    except Exception:
+                        sig = 0
+                elif 'Encryption key:' in line:
+                    sec = 'WPA' if 'on' in line else 'Open'
+                elif 'Extra:' in line and ssid:
+                    networks.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+                    ssid, sig, sec = '', 0, 'Open'
+            if ssid:
+                networks.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+    except Exception as e:
+        return jsonify({'networks': [], 'error': str(e)})
+
+    networks.sort(key=lambda n: (not n['active'], -n['signal']))
+    seen, unique = set(), []
+    for n in networks:
+        if n['ssid'] not in seen:
+            seen.add(n['ssid'])
+            unique.append(n)
+    return jsonify({'networks': unique})
+
+
+@app.route('/api/wifi/connect', methods=['POST'])
+@login_required
+def wifi_connect():
+    data = request.get_json(silent=True) or {}
+    ssid = data.get('ssid', '').strip()
+    password = data.get('password', '').strip()
+    if not ssid:
+        return jsonify({'ok': False, 'error': 'SSID required'}), 400
+    tool, iface = _wifi_tool()
+    if not iface:
+        return jsonify({'ok': False, 'error': 'No wireless interface found'})
+    try:
+        if tool == 'nmcli':
+            cmd = ['sudo', 'nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', iface]
+            if password:
+                cmd += ['password', password]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            ok = r.returncode == 0
+            msg = (r.stdout.strip() or r.stderr.strip()).splitlines()[0] if (r.stdout or r.stderr) else ''
+            return jsonify({'ok': ok, 'message': msg})
+        else:
+            if not password:
+                return jsonify({'ok': False, 'error': 'wpa_supplicant requires a password'})
+            conf_path = f'/etc/wpa_supplicant/wpa_supplicant.conf'
+            block = f'\nnetwork={{\n    ssid="{ssid}"\n    psk="{password}"\n}}\n'
+            try:
+                with open(conf_path, 'r') as f:
+                    content = f.read()
+                if f'ssid="{ssid}"' not in content:
+                    with open(conf_path, 'a') as f:
+                        f.write(block)
+            except FileNotFoundError:
+                with open(conf_path, 'w') as f:
+                    f.write(f'ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\nupdate_config=1\ncountry=US{block}')
+            subprocess.run(['sudo', 'wpa_cli', '-i', iface, 'reconfigure'],
+                           capture_output=True, timeout=10)
+            return jsonify({'ok': True, 'message': 'Config updated. Reconnecting…'})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+
+@app.route('/api/wifi/disconnect', methods=['POST'])
+@login_required
+def wifi_disconnect():
+    tool, iface = _wifi_tool()
+    if not iface:
+        return jsonify({'ok': False, 'error': 'No wireless interface found'})
+    try:
+        if tool == 'nmcli':
+            r = subprocess.run(['sudo', 'nmcli', 'device', 'disconnect', iface],
+                               capture_output=True, text=True, timeout=10)
+            return jsonify({'ok': r.returncode == 0, 'message': r.stdout.strip() or r.stderr.strip()})
+        return jsonify({'ok': False, 'error': 'Not supported without nmcli'})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+
 @app.route('/api/kiosk/<action>', methods=['POST'])
 @login_required
 def kiosk_control(action):
@@ -1646,11 +1950,15 @@ def _parse_version(v):
 
 
 def _kiosk_token_ok(req):
-    """Return True if the request carries a valid kiosk auth token."""
+    """Return True if the request carries a valid kiosk auth token or paired kiosk ID."""
     token = req.headers.get('X-Kiosk-Token') or req.args.get('kiosk_token')
-    if not token:
-        return False
-    return any(k.get('auth_token') == token for k in get_kiosks().values())
+    kiosk_id = req.headers.get('X-Kiosk-Id') or req.args.get('kiosk_id')
+    kiosks = get_kiosks()
+    if token and any(k.get('auth_token') == token for k in kiosks.values()):
+        return True
+    if kiosk_id and kiosk_id in kiosks:
+        return True
+    return False
 
 
 def _check_remote_version(source_url):
@@ -1671,12 +1979,18 @@ def _check_remote_version(source_url):
             r.raise_for_status()
             data = r.json()
             tag = data.get('tag_name', '')
+            release_name = data.get('name', '')
             assets = data.get('assets', [])
             dl = next((a['browser_download_url'] for a in assets
                         if a['name'].endswith('.zip')), None)
             if not dl:
                 dl = data.get('zipball_url', '')
-            return tag, dl, None
+            # tag_name may be a label ("secondfix") rather than a version number.
+            # Extract a dotted version from tag_name first, then release name.
+            _ver_re = re.compile(r'\d+\.\d+[\d.]*')
+            ver_match = _ver_re.search(tag) or _ver_re.search(release_name)
+            version_str = ver_match.group(0) if ver_match else tag
+            return version_str, dl, None
 
         # Try as a scoreboard /api/update/version endpoint
         if source_url.endswith('/api/update/version') or '/api/update' not in source_url:
@@ -1698,7 +2012,7 @@ def _check_remote_version(source_url):
         return None, None, str(e)
 
 
-def _apply_update_package(download_url, kiosk_token=None):
+def _apply_update_package(download_url, kiosk_token=None, kiosk_id=None):
     """
     Apply an update from download_url (a zip file).
     Falls back to git pull if the app lives in a git repo.
@@ -1723,6 +2037,8 @@ def _apply_update_package(download_url, kiosk_token=None):
         headers = {}
         if kiosk_token:
             headers['X-Kiosk-Token'] = kiosk_token
+        if kiosk_id:
+            headers['X-Kiosk-Id'] = kiosk_id
         r = requests.get(download_url, headers=headers, timeout=120, stream=True)
         r.raise_for_status()
 
@@ -1849,9 +2165,10 @@ def update_apply():
 
     cfg = get_kiosk_config()
     kiosk_token = cfg.get('auth_token', '')
+    kiosk_id = cfg.get('kiosk_id', '')
 
     def _do_apply():
-        ok, msg = _apply_update_package(dl, kiosk_token or None)
+        ok, msg = _apply_update_package(dl, kiosk_token or None, kiosk_id or None)
         with _update_lock:
             _update_state['applying'] = False
             _update_state['last_result'] = 'ok' if ok else 'error'
@@ -1958,7 +2275,7 @@ def _schedule_loop():
                         )
                     if newer and upd.get('auto_apply') and not err:
                         cfg = get_kiosk_config()
-                        ok, msg = _apply_update_package(dl, cfg.get('auth_token') or None)
+                        ok, msg = _apply_update_package(dl, cfg.get('auth_token') or None, cfg.get('kiosk_id') or None)
                         with _update_lock:
                             _update_state['last_result'] = 'ok' if ok else 'error'
                             _update_state['last_message'] = msg
