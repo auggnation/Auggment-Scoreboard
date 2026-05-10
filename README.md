@@ -1,7 +1,7 @@
 # Auggmented Scoreboard
 
 Auggmented Scoreboard is a Python-based web application designed to turn any TV into a dynamic sports ticker and schedule board. Developed for professional and local sports enthusiasts, it fetches real-time data from ESPN and integrates local school schedules via RSS, iCal, or MaxPreps feeds.
-
+![Alt Text](images/Screenshot 2026-05-02 090657.png)
 ## What It Does
 
 * Live Scores & Tickers: Displays real-time scores for NFL, MLB, NBA, NHL, and more.
