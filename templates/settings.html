@@ -51,16 +51,6 @@
             Uncheck to run this device as a data-only backend — no scoreboard will be shown here.
         </p>
 
-        <div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
-            <div style="width:160px;">
-                <label>Port</label>
-                <input type="number" id="server_port" min="1" max="65535" placeholder="5000" style="width:100%;">
-            </div>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin:0 0 10px;">
-                Port the server listens on (default 5000). Takes effect after a backend restart.
-            </p>
-        </div>
-
         <!-- Cache Status -->
         <div class="info-box">
             <div class="info-box-title">DATA CACHE</div>
@@ -348,6 +338,26 @@
 
     </div><!-- /section-pair: Logo + Specials -->
 
+
+    <!-- ── Slide Order ── -->
+    <div class="section" id="slide-order-section">
+        <div class="section-title">Slide Order</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">
+            Drag to set the exact order every slide appears on screen. Sport cards only show when that team/driver/golfer has an active event.
+        </p>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Each slide shows for</label>
+            <input type="number" id="slide_duration" min="2" max="120" step="1"
+                   style="width:72px;padding:8px 10px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:8px;font-size:18px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">seconds</label>
+        </div>
+        <div id="playlist-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <p style="color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin-top:10px;">
+            Favorites and custom slides are added here automatically. Remove from their respective sections to take them out of the rotation.
+        </p>
+    </div>
+
+
     <!-- ── Favorite Teams ── -->
     <div class="section">
         <div class="section-title">Favorite Teams (Score Cards)</div>
@@ -527,9 +537,15 @@
         </div>
         <p id="kiosk-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
 
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-top:24px;margin-bottom:12px;">
-            Restart the scoreboard backend (reloads the app after config changes).
-        </p>
+        <div style="margin-top:24px;margin-bottom:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+            <div>
+                <label style="display:block;margin-bottom:6px;">Server Port</label>
+                <input type="number" id="server_port" min="1" max="65535" placeholder="5000" style="width:110px;">
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin:0 0 10px;">
+                Port this device listens on (default 5000). Save then restart backend to apply.
+            </p>
+        </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <button class="btn" onclick="restartBackend()" style="background:#1565C0;color:white;font-size:16px;padding:10px 22px;">RESTART BACKEND</button>
         </div>
@@ -711,6 +727,185 @@
         "softball/college-softball", "volleyball/womens-college-volleyball",
     ]);
 
+    // ── Slide Playlist (compact chip order) ──
+
+    let slidePlaylist = [];  // [{type, key, label?, icon?}, ...]
+    let _plDragSrc = null;
+
+    const TEAM_ICONS = {
+        'football': '🏈', 'baseball': '⚾', 'basketball': '🏀',
+        'hockey': '🏒', 'soccer': '⚽', 'softball': '🥎',
+        'volleyball': '🏐', 'racing': '🏎️', 'golf': '⛳',
+    };
+
+    function _sportIcon(leaguePath) {
+        if (!leaguePath) return '📺';
+        return TEAM_ICONS[leaguePath.split('/')[0]] || '📺';
+    }
+
+    function buildPlaylistChip(item, idx) {
+        const el = document.createElement('div');
+        el.className = 'pl-chip';
+        el.draggable = true;
+
+        let iconHtml = '', nameHtml = '', badgeHtml = '';
+
+        if (item.type === 'team') {
+            const colon = (item.key || '').lastIndexOf(':');
+            const path = colon > -1 ? item.key.slice(0, colon) : '';
+            const abbr = colon > -1 ? item.key.slice(colon + 1) : item.key;
+            const sport = path.split('/')[0] || '';
+            const league = path.split('/')[1] || '';
+            const meta = teamMeta[item.key] || {};
+            const color = meta.color ? `#${meta.color.replace('#','')}` : '#555';
+            iconHtml = meta.logo
+                ? `<img src="${meta.logo}" style="width:28px;height:28px;object-fit:contain;" onerror="this.style.display='none'">`
+                : `<span style="font-size:18px;">${_sportIcon(path)}</span>`;
+            nameHtml = `<span class="pl-chip-name" style="color:${color};">${abbr}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">${(league || sport).toUpperCase()}</span>`;
+        } else if (item.type === 'driver') {
+            const series = (item.series || '').split('/')[1] || 'RACING';
+            iconHtml = `<span style="font-size:18px;">🏎️</span>`;
+            nameHtml = `<span class="pl-chip-name">${item.car ? '#'+item.car+' ' : ''}${item.name}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">${series.toUpperCase()}</span>`;
+        } else if (item.type === 'golfer') {
+            iconHtml = `<span style="font-size:18px;">⛳</span>`;
+            nameHtml = `<span class="pl-chip-name">${item.name}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">PGA</span>`;
+        } else if (item.type === 'special') {
+            const sp = specials.find(s => s.uid === item.uid);
+            const t = sp ? sp.type || 'text' : 'text';
+            const title = sp ? (sp.title || sp.url_label || sp.url || '(no title)') : '(deleted)';
+            const icons2 = {text: '📝', image: '🖼', url: '🔗'};
+            iconHtml = `<span style="font-size:18px;">${icons2[t] || '📝'}</span>`;
+            nameHtml = `<span class="pl-chip-name">${title}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">${t.toUpperCase()}</span>`;
+        } else if (item.type === 'logo') {
+            iconHtml = `<span style="font-size:18px;">🖼️</span>`;
+            nameHtml = `<span class="pl-chip-name">Logo Slide</span>`;
+            badgeHtml = `<span class="pl-chip-badge">LOGO</span>`;
+        } else if (item.type === 'local') {
+            iconHtml = `<span style="font-size:18px;">📅</span>`;
+            nameHtml = `<span class="pl-chip-name">Local Schedule &amp; RSS</span>`;
+            badgeHtml = `<span class="pl-chip-badge">LOCAL</span>`;
+        }
+
+        el.innerHTML = `
+            <div class="pl-chip-seq">
+                <span class="pl-chip-num">${idx + 1}</span>
+                <span class="drag-grip">⠿</span>
+            </div>
+            <span style="flex-shrink:0;font-size:13px;">${iconHtml}</span>
+            <div style="min-width:0;flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px;">
+                ${nameHtml}
+                ${badgeHtml}
+            </div>`;
+
+        el.addEventListener('dragstart', e => {
+            _plDragSrc = idx;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => el.style.opacity = '0.35', 0);
+        });
+        el.addEventListener('dragend', () => { el.style.opacity = '1'; _plDragSrc = null; });
+        el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+        el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+        el.addEventListener('drop', e => {
+            e.preventDefault(); el.classList.remove('drag-over');
+            if (_plDragSrc === null || _plDragSrc === idx) return;
+            const [moved] = slidePlaylist.splice(_plDragSrc, 1);
+            slidePlaylist.splice(idx, 0, moved);
+            renderPlaylist();
+        });
+        return el;
+    }
+
+    function renderPlaylist() {
+        const container = document.getElementById('playlist-chips');
+        if (!container) return;
+        container.innerHTML = '';
+        slidePlaylist.forEach((item, idx) => {
+            container.appendChild(buildPlaylistChip(item, idx));
+        });
+    }
+
+    function syncPlaylist() {
+        // Build the canonical set of items that should be in the playlist
+        const wantedKeys = new Set();
+
+        // Logo (always first if present)
+        const logoEntry = { type: 'logo', key: 'logo' };
+
+        // Teams
+        const teamEntries = selectedTeams.map(key => ({ type: 'team', key }));
+        teamEntries.forEach(e => wantedKeys.add(e.key));
+
+        // Drivers
+        const driverEntries = [];
+        selectedNascarFavorites.forEach(name => {
+            const key = `racing/nascar-cup:${name}`;
+            driverEntries.push({ type: 'driver', key, series: 'racing/nascar-cup', name });
+            wantedKeys.add(key);
+        });
+        selectedIndycarFavorites.forEach(name => {
+            const key = `racing/irl:${name}`;
+            driverEntries.push({ type: 'driver', key, series: 'racing/irl', name });
+            wantedKeys.add(key);
+        });
+        selectedF1Favorites.forEach(name => {
+            const key = `racing/f1:${name}`;
+            driverEntries.push({ type: 'driver', key, series: 'racing/f1', name });
+            wantedKeys.add(key);
+        });
+
+        // Golfers
+        const golferEntries = selectedGolfFavorites.map(name => ({
+            type: 'golfer', key: `golf/pga:${name}`, name
+        }));
+        golferEntries.forEach(e => wantedKeys.add(e.key));
+
+        // Specials (each gets a uid, ensure they have one)
+        specials.forEach((sp, i) => {
+            if (!sp.uid) sp.uid = `sp-${Date.now()}-${i}`;
+        });
+        const specialEntries = specials.map(sp => ({ type: 'special', key: `sp:${sp.uid}`, uid: sp.uid }));
+        specialEntries.forEach(e => wantedKeys.add(e.key));
+
+        // Local (always last if present)
+        const localEntry = { type: 'local', key: 'local' };
+
+        // Now merge: keep existing playlist order for items still valid, add new ones
+        const allNewEntries = [...teamEntries, ...driverEntries, ...golferEntries, ...specialEntries];
+        const newKeyMap = {};
+        allNewEntries.forEach(e => { newKeyMap[e.key] = e; });
+
+        // Filter existing playlist to only keep valid items
+        const kept = slidePlaylist.filter(item => {
+            if (item.type === 'logo' || item.type === 'local') return true;
+            return wantedKeys.has(item.key);
+        });
+
+        // Add any new items not already in playlist
+        const keptKeys = new Set(kept.map(i => i.key || i.type));
+        allNewEntries.forEach(entry => {
+            if (!keptKeys.has(entry.key)) kept.push(entry);
+        });
+
+        // Ensure logo is present (at position 0 if not already there)
+        if (!kept.some(i => i.type === 'logo')) kept.unshift(logoEntry);
+        // Ensure local is present (at end if not already there)
+        if (!kept.some(i => i.type === 'local')) kept.push(localEntry);
+
+        // Refresh any driver entries with current name data (in case items were added without car info)
+        slidePlaylist = kept.map(item => {
+            if (item.type === 'driver' && newKeyMap[item.key]) {
+                return { ...newKeyMap[item.key] };
+            }
+            return item;
+        });
+
+        renderPlaylist();
+    }
+
 
     // ── Accent color ──
 
@@ -774,7 +969,7 @@
         el.addEventListener('click', () => {
             el.classList.toggle('selected');
             refreshConfSection();
-
+            syncPlaylist();
         });
     });
 
@@ -1050,6 +1245,7 @@
                     <span class="sp-row-label">TYPE</span>
                     <button class="sp-toggle-btn${sptype==='text'?' active':''}" data-sptype="text">TEXT</button>
                     <button class="sp-toggle-btn${sptype==='image'?' active':''}" data-sptype="image">IMAGE</button>
+                    <button class="sp-toggle-btn${sptype==='url'?' active':''}" data-sptype="url">LINK / URL</button>
                 </div>
                 <div class="sp-text-fields" style="display:${sptype==='text'?'block':'none'}">
                     <div class="special-item-fields">
@@ -1065,6 +1261,13 @@
                         <input type="file" accept="image/*" style="display:none" class="sp-img-input">
                     </div>
                 </div>
+                <div class="sp-url-fields" style="display:${sptype==='url'?'block':'none'}">
+                    <div class="special-item-fields" style="grid-template-columns:1fr 1fr;">
+                        <input type="text" placeholder="Label (e.g. Dashboard)" value="${sp.url_label||''}" data-field="url_label">
+                        <input type="url" placeholder="https://..." value="${sp.url||''}" data-field="url">
+                    </div>
+                    <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:6px;">Displayed as a fullscreen embedded page. Works best with local network URLs.</p>
+                </div>
                 <hr class="sp-divider">
                 <div class="sp-row">
                     <span class="sp-row-label">SHOW</span>
@@ -1076,7 +1279,7 @@
                 <div class="sp-chips sp-days-dom" style="display:${smode==='dom'?'flex':'none'}">${domChips}</div>`;
 
             item.querySelector('input[type=checkbox]').addEventListener('change', e => { specials[idx].enabled = e.target.checked; });
-            item.querySelector('.special-del').addEventListener('click', () => { specials.splice(idx,1); renderSpecials(); });
+            item.querySelector('.special-del').addEventListener('click', () => { specials.splice(idx,1); renderSpecials(); syncPlaylist(); });
             item.querySelectorAll('[data-sptype]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     item.querySelectorAll('[data-sptype]').forEach(b => b.classList.remove('active'));
@@ -1084,6 +1287,8 @@
                     specials[idx].type = btn.dataset.sptype;
                     item.querySelector('.sp-text-fields').style.display  = btn.dataset.sptype==='text'?'block':'none';
                     item.querySelector('.sp-image-fields').style.display = btn.dataset.sptype==='image'?'block':'none';
+                    item.querySelector('.sp-url-fields').style.display   = btn.dataset.sptype==='url'?'block':'none';
+                    syncPlaylist();
                 });
             });
             item.querySelector('[data-field=title]').addEventListener('input', e => { specials[idx].title = e.target.value; });
@@ -1092,6 +1297,8 @@
                 specials[idx].color = e.target.value;
                 item.style.borderColor = e.target.value;
             });
+            item.querySelector('[data-field=url]')?.addEventListener('input', e => { specials[idx].url = e.target.value; syncPlaylist(); });
+            item.querySelector('[data-field=url_label]')?.addEventListener('input', e => { specials[idx].url_label = e.target.value; syncPlaylist(); });
             const imgBtn   = item.querySelector('.sp-img-btn');
             const imgInput = item.querySelector('.sp-img-input');
             imgBtn.addEventListener('click', () => imgInput.click());
@@ -1157,8 +1364,9 @@
     }
 
     function addSpecial() {
-        specials.push({ enabled:true, type:'text', title:'', body:'', color:'#F5A800', image:'', schedule_type:'always', schedule_days:[] });
+        specials.push({ uid:`sp-${Date.now()}`, enabled:true, type:'text', title:'', body:'', color:'#F5A800', image:'', url:'', url_label:'', schedule_type:'always', schedule_days:[] });
         renderSpecials();
+        syncPlaylist();
         const items = document.querySelectorAll('.special-item');
         const last  = items[items.length-1];
         if (last) last.querySelector('[data-field=title]').focus();
@@ -1450,6 +1658,12 @@
         specials = currentSettings.specials || [];
         renderSpecials();
 
+        slidePlaylist = currentSettings.slide_playlist || [];
+        // uid migration: ensure all specials have UIDs before syncPlaylist
+        specials.forEach((sp, i) => { if (!sp.uid) sp.uid = `sp-${Date.now()}-${i}`; });
+        document.getElementById('slide_duration').value = currentSettings.slide_duration || 8;
+        syncPlaylist();
+
         const ls = currentSettings.local_schedule || {};
         rssFeeds = ls.rss_feeds || [];
         // Migrate legacy single feed into array
@@ -1548,6 +1762,8 @@
             indycar_favorites: selectedIndycarFavorites,
             f1_favorites: selectedF1Favorites,
             golf_favorites: selectedGolfFavorites,
+            slide_playlist: slidePlaylist,
+            slide_duration: parseInt(document.getElementById('slide_duration').value) || 8,
             league_conferences,
             admin_credentials: {
                 username: document.getElementById('admin_username').value || 'admin',
@@ -1622,6 +1838,7 @@
                     if (selectedTeams.includes(key)) { selectedTeams = selectedTeams.filter(k => k !== key); div.classList.remove('selected'); }
                     else { selectedTeams.push(key); div.classList.add('selected'); }
                     updateFavList();
+                    syncPlaylist();
                 });
                 list.appendChild(div);
             });
@@ -1643,11 +1860,13 @@
         selectedNascarFavorites.push(name);
         input.value = '';
         updateNascarFavList();
+        syncPlaylist();
     }
 
     function removeNascarFavorite(idx) {
         selectedNascarFavorites.splice(idx, 1);
         updateNascarFavList();
+        syncPlaylist();
     }
 
     function updateNascarFavList() {
@@ -1675,11 +1894,13 @@
         selectedIndycarFavorites.push(name);
         input.value = '';
         updateIndycarFavList();
+        syncPlaylist();
     }
 
     function removeIndycarFavorite(idx) {
         selectedIndycarFavorites.splice(idx, 1);
         updateIndycarFavList();
+        syncPlaylist();
     }
 
     function updateIndycarFavList() {
@@ -1708,11 +1929,13 @@
         selectedF1Favorites.push(name);
         input.value = '';
         updateF1FavList();
+        syncPlaylist();
     }
 
     function removeF1Favorite(idx) {
         selectedF1Favorites.splice(idx, 1);
         updateF1FavList();
+        syncPlaylist();
     }
 
     function updateF1FavList() {
@@ -1744,11 +1967,13 @@
         selectedGolfFavorites.push(name);
         input.value = '';
         updateGolfFavList();
+        syncPlaylist();
     }
 
     function removeGolfFavorite(idx) {
         selectedGolfFavorites.splice(idx, 1);
         updateGolfFavList();
+        syncPlaylist();
     }
 
     function updateGolfFavList() {
@@ -1805,6 +2030,7 @@
                 const match = document.querySelector(`#team-list [data-key="${key}"]`);
                 if (match) match.classList.remove('selected');
                 updateFavList();
+                syncPlaylist();
             });
             grid.appendChild(card);
         });

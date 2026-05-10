@@ -128,6 +128,7 @@
         let previousScores = {}; // key: eventId, value: score string for flash detection
         let currentSlideKey = 'logo';
         let slideTimer = null;
+        let slideInterval = 13000;
         let lastTickerHtml = '';
         let settingsVersion = null;
         let appVersion = null;
@@ -185,7 +186,7 @@
 
         function ensureSlideshow() {
             if (!slideTimer) {
-                slideTimer = setInterval(advanceSlide, 13000);
+                slideTimer = setInterval(advanceSlide, slideInterval);
             }
         }
 
@@ -205,6 +206,16 @@
                     return;
                 }
                 appVersion = data.app_version || appVersion;
+
+                // Update slide interval if duration changed
+                const newInterval = (data.slide_duration || 8) * 1000;
+                if (newInterval !== slideInterval) {
+                    slideInterval = newInterval;
+                    if (slideTimer) {
+                        clearInterval(slideTimer);
+                        slideTimer = setInterval(advanceSlide, slideInterval);
+                    }
+                }
 
                 // Apply user-configured colors as CSS variables
                 const colors = data.colors || {};
@@ -248,13 +259,21 @@
 
 
                 // ─── BUILD SLIDES ───
-                const stage = document.getElementById('main-stage');
-                let slidesHTML = `
+                // Collect slides into category buckets, then sort by slide_order
+                const catSlides = {};
+                function addSlide(cat, html) {
+                    const el = document.createElement('div');
+                    el.innerHTML = html.trim();
+                    const node = el.firstElementChild;
+                    if (!catSlides[cat]) catSlides[cat] = [];
+                    catSlides[cat].push(node);
+                }
+
+                // Logo
+                addSlide('logo', `
                     <div class="slide" data-slide-key="logo" id="logo-slide">
                         <center><img src="/static/uploads/logo.png?t=${Date.now()}" onerror="this.style.display='none'"></center>
-                    </div>
-                `;
-
+                    </div>`);
 
                 const flashIds = new Set();
                 (data.teams || []).forEach(t => {
@@ -318,7 +337,7 @@
 
                     const vEventTime = t.is_pre ? (t.local_time || t.status) : t.status;
                     const vLiveDot = stateClass === 'live' ? '<span class="live-dot"></span>' : '';
-                    slidesHTML += `
+                    addSlide(t.league_path || 'teams', `
                         <div class="slide" data-slide-key="team:${t.away_name}@${t.home_name}" ${flashAttr}>
                             <div class="card ${stateClass} ${doFlash ? 'flash' : ''}" id="card-${key.replace(/[^a-z0-9]/gi,'_')}">
                                 ${stateClass === 'final' ? '<div class="final-badge">F</div>' : ''}
@@ -346,7 +365,7 @@
                                 ${statusContent}
                             </div>
                         </div>
-                    `;
+                    `);
                 });
 
 
@@ -384,7 +403,7 @@
 
                     if (favDriver) {
                         const place = ordSuffix(favDriver.pos);
-                        slidesHTML += `
+                        addSlide(race.league_path || 'racing', `
                             <div class="slide" data-slide-key="race:${race.league_label}:${race.race_name}:fav">
                                 <div class="card ${sc}">
                                     ${isOver ? '<div class="final-badge">F</div>' : ''}
@@ -404,7 +423,7 @@
                                     </div>
                                     ${statusBar}
                                 </div>
-                            </div>`;
+                            </div>`);
                     }
                 });
 
@@ -423,7 +442,7 @@
                         } else {
                             holeInfo = `<div class="race-laps-info">${golf.status}</div>`;
                         }
-                        slidesHTML += `
+                        addSlide(golf.league_path || 'golf/pga', `
                             <div class="slide" data-slide-key="golf:${golf.tournament_name}:fav">
                                 <div class="card ${sc}">
                                     ${isGolfOver ? '<div class="final-badge">F</div>' : ''}
@@ -443,98 +462,132 @@
                                     </div>
                                     ${statusBar}
                                 </div>
-                            </div>`;
+                            </div>`);
                     }
                 });
 
-                // ─── INTERLEAVE SPECIALS + LOCAL SCHEDULE ───
-                // Insert specials evenly between game cards
-                const specials = [
-                    ...(data.specials || []),
-                    ...(data.local_schedule_items || []),
-                ];
-                let finalSlideEls;
-                if (specials.length) {
-                    // Split slidesHTML into logo slide + game slides, then weave specials in
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(`<div>${slidesHTML}</div>`, 'text/html');
-                    const allSlides = [...doc.body.firstChild.children];
-                    const logoSlide = allSlides.shift(); // always first
-                    const gameSlides = allSlides;
-
-
-                    const step = gameSlides.length > 0
-                        ? Math.max(1, Math.ceil(gameSlides.length / (specials.length + 1)))
-                        : 1;
-
-
-                    specials.forEach((sp, i) => {
-                        const insertAt = Math.min((i + 1) * step, gameSlides.length);
-                        const color = sp.color || '#F5A800';
-                        const specialEl = document.createElement('div');
-                        specialEl.className = 'slide';
-                        specialEl.dataset.slideKey = `special-${i}:${sp.type}:${sp.title || ''}`;
-                        if (sp.type === 'schedule') {
-                            const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
-                            specialEl.innerHTML = `
-                                <div class="card pre">
-                                    <div class="league-tag">${sp.label}</div>
-                                    <div class="teams-grid">
-                                        <div class="team-block away"><span class="team-abbr">${sp.away_team}</span></div>
-                                        <div class="center-col">
-                                            <div class="score-display pre vs-label">VS</div>
-                                        </div>
-                                        <div class="team-block home"><span class="team-abbr">${sp.home_team}</span></div>
+                // ─── SPECIALS + LOCAL SCHEDULE ───
+                [...(data.specials || []), ...(data.local_schedule_items || [])].forEach((sp, i) => {
+                    const color = sp.color || '#F5A800';
+                    const specialEl = document.createElement('div');
+                    specialEl.className = 'slide';
+                    specialEl.dataset.slideKey = `special-${i}:${sp.type}:${sp.title || ''}:${sp.uid || ''}`;
+                    if (sp.type === 'schedule') {
+                        const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
+                        specialEl.innerHTML = `
+                            <div class="card pre">
+                                <div class="league-tag">${sp.label}</div>
+                                <div class="teams-grid">
+                                    <div class="team-block away"><span class="team-abbr">${sp.away_team}</span></div>
+                                    <div class="center-col"><div class="score-display pre vs-label">VS</div></div>
+                                    <div class="team-block home"><span class="team-abbr">${sp.home_team}</span></div>
+                                </div>
+                                <div class="v-event">
+                                    <span class="v-event-league">${sp.label}</span>
+                                    ${dt ? `<span class="v-event-time pre">${dt}</span>` : ''}
+                                </div>
+                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
+                            </div>`;
+                    } else if (sp.type === 'rss') {
+                        const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
+                        const logoHtml = sp.logo ? `<img src="${sp.logo}">` : '';
+                        specialEl.innerHTML = `
+                            <div class="card pre rss-card">
+                                <div class="league-tag">${sp.tag || 'CUSTOM'}</div>
+                                <div class="rss-body">
+                                    <div class="rss-logo-col">${logoHtml}<div class="rss-label">${sp.label}</div></div>
+                                    <div class="rss-text-col">
+                                        <div class="rss-event">${sp.title}</div>
+                                        ${sp.body ? `<div class="rss-subevent">${sp.body}</div>` : ''}
                                     </div>
-                                    <div class="v-event">
-                                        <span class="v-event-league">${sp.label}</span>
-                                        ${dt ? `<span class="v-event-time pre">${dt}</span>` : ''}
-                                    </div>
-                                    ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
-                                </div>`;
-                        } else if (sp.type === 'rss') {
-                            const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
-                            const logoHtml = sp.logo ? `<img src="${sp.logo}">` : '';
-                            const topTag = sp.tag || 'CUSTOM';
-                            specialEl.innerHTML = `
-                                <div class="card pre rss-card">
-                                    <div class="league-tag">${topTag}</div>
-                                    <div class="rss-body">
-                                        <div class="rss-logo-col">
-                                            ${logoHtml}
-                                            <div class="rss-label">${sp.label}</div>
-                                        </div>
-                                        <div class="rss-text-col">
-                                            <div class="rss-event">${sp.title}</div>
-                                            ${sp.body ? `<div class="rss-subevent">${sp.body}</div>` : ''}
-                                        </div>
-                                    </div>
-                                    ${dt ? `<div class="v-event"><span class="v-event-time pre">${dt}</span></div>` : ''}
-                                    ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
-                                </div>`;
-                        } else if (sp.type === 'image' && sp.image) {
-                            specialEl.innerHTML = `
-                                <div class="card special-card" style="border-color:${color};padding:0;overflow:hidden;">
-                                    <img src="${sp.image}" style="width:100%;height:100%;object-fit:contain;">
-                                </div>`;
-                        } else {
-                            specialEl.innerHTML = `
-                                <div class="card special-card" style="border-color:${color}">
-                                    <div class="special-title" style="color:${color}">${sp.title}</div>
-                                    ${sp.body ? `<div class="special-body">${sp.body}</div>` : ''}
-                                </div>`;
+                                </div>
+                                ${dt ? `<div class="v-event"><span class="v-event-time pre">${dt}</span></div>` : ''}
+                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
+                            </div>`;
+                    } else if (sp.type === 'image' && sp.image) {
+                        specialEl.innerHTML = `
+                            <div class="card special-card" style="border-color:${color};padding:0;overflow:hidden;">
+                                <img src="${sp.image}" style="width:100%;height:100%;object-fit:contain;">
+                            </div>`;
+                    } else if (sp.type === 'url' && sp.url) {
+                        specialEl.innerHTML = `
+                            <div class="card" style="padding:0;overflow:hidden;border-color:#333;">
+                                <iframe src="${sp.url}"
+                                        style="width:100%;height:100%;border:none;display:block;"
+                                        title="${sp.url_label || sp.url}"
+                                        sandbox="allow-scripts allow-same-origin allow-popups">
+                                </iframe>
+                            </div>`;
+                    } else {
+                        specialEl.innerHTML = `
+                            <div class="card special-card" style="border-color:${color}">
+                                <div class="special-title" style="color:${color}">${sp.title}</div>
+                                ${sp.body ? `<div class="special-body">${sp.body}</div>` : ''}
+                            </div>`;
+                    }
+                    const cat = sp.type === 'schedule' || sp.type === 'rss' ? 'local' : 'specials';
+                    if (!catSlides[cat]) catSlides[cat] = [];
+                    catSlides[cat].push(specialEl);
+                });
+
+                // ─── APPLY SLIDE PLAYLIST ORDER ───
+                const playlist = data.slide_playlist || [];
+                let orderedSlides;
+
+                if (playlist.length) {
+                    // Group collected slides by their category key
+                    orderedSlides = [];
+                    playlist.forEach(item => {
+                        if (!item.key && item.type !== 'logo' && item.type !== 'local') return;
+                        if (item.type === 'logo') {
+                            orderedSlides.push(...(catSlides['logo'] || []));
+                        } else if (item.type === 'team') {
+                            // key = "league_path:abbr" — match by full team key
+                            const path = item.key.slice(0, item.key.lastIndexOf(':'));
+                            const abbr = item.key.slice(item.key.lastIndexOf(':') + 1);
+                            (catSlides[path] || []).forEach(el => {
+                                if (el.dataset.slideKey && el.dataset.slideKey.includes(abbr)) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'driver') {
+                            const path = item.series || '';
+                            (catSlides[path] || []).forEach(el => {
+                                if (el.dataset.slideKey && el.dataset.slideKey.includes(item.name || '')) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'golfer') {
+                            (catSlides['golf/pga'] || []).forEach(el => {
+                                if (el.dataset.slideKey && el.dataset.slideKey.includes(item.name || '')) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'special') {
+                            (catSlides['specials'] || []).forEach(el => {
+                                // match by uid stored in slideKey or just add all in order
+                                if (el.dataset.slideKey && item.uid && el.dataset.slideKey.includes(item.uid)) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'local') {
+                            orderedSlides.push(...(catSlides['local'] || []));
                         }
-                        gameSlides.splice(insertAt + i, 0, specialEl);
                     });
-
-
-                    finalSlideEls = [logoSlide, ...gameSlides];
+                    // Append any slides not matched by playlist (fallback)
+                    const usedEls = new Set(orderedSlides);
+                    Object.values(catSlides).flat().forEach(el => {
+                        if (!usedEls.has(el)) orderedSlides.push(el);
+                    });
                 } else {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(`<div>${slidesHTML}</div>`, 'text/html');
-                    finalSlideEls = [...doc.body.firstChild.children];
+                    // No playlist — use category order (logo first, then everything else)
+                    const orderedKeys = ['logo'];
+                    Object.keys(catSlides).forEach(k => { if (!orderedKeys.includes(k)) orderedKeys.push(k); });
+                    orderedSlides = [];
+                    orderedKeys.forEach(cat => { if (catSlides[cat]) orderedSlides.push(...catSlides[cat]); });
                 }
-                patchStage(finalSlideEls);
+
+                patchStage(orderedSlides);
 
 
                 // ─── BUILD TICKER ───

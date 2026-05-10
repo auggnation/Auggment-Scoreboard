@@ -133,8 +133,11 @@ apt-get install -y \
     python3-pam \
     curl \
     wget \
+    iproute2 \
     network-manager \
-    wireless-tools
+    wireless-tools \
+    wpasupplicant \
+    iw
 
 # Display environment — kiosk and combined only
 if [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]]; then
@@ -390,22 +393,62 @@ echo "--- Configuring Sudoers ---"
 SYSTEMCTL_PATH=$(command -v systemctl)
 NMCLI_PATH=$(command -v nmcli 2>/dev/null || echo /usr/bin/nmcli)
 IWLIST_PATH=$(command -v iwlist 2>/dev/null || echo /usr/sbin/iwlist)
-WPA_CLI_PATH=$(command -v wpa_cli 2>/dev/null || echo /sbin/wpa_cli)
+IW_PATH=$(command -v iw 2>/dev/null || echo /usr/sbin/iw)
+WPA_CLI_PATH=$(command -v wpa_cli 2>/dev/null || echo /usr/sbin/wpa_cli)
+IP_PATH=$(command -v ip 2>/dev/null || echo /sbin/ip)
 cat > /etc/sudoers.d/scoreboard <<EOF
 # Scoreboard service control
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH start kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH stop kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH restart kiosk.service
-# Wi-Fi management
+# Wi-Fi management (nmcli)
 $APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH device wifi list *
 $APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH device wifi connect *
 $APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH device disconnect *
+# Wi-Fi scan (iw / iwlist)
 $APP_USER ALL=(ALL) NOPASSWD: $IWLIST_PATH * scan
-$APP_USER ALL=(ALL) NOPASSWD: $WPA_CLI_PATH -i * reconfigure
+$APP_USER ALL=(ALL) NOPASSWD: $IW_PATH dev * scan
+$APP_USER ALL=(ALL) NOPASSWD: $IW_PATH dev * info
+# wpa_cli — allow all subcommands (connect, disconnect, list_networks, etc.)
+$APP_USER ALL=(ALL) NOPASSWD: $WPA_CLI_PATH
 EOF
 chmod 440 /etc/sudoers.d/scoreboard
 visudo -c -f /etc/sudoers.d/scoreboard && echo "Written: /etc/sudoers.d/scoreboard" \
     || echo "WARNING: sudoers syntax error — check /etc/sudoers.d/scoreboard"
+echo ""
+
+# ─── FALLBACK STATIC IP ─────────────────────────────────────────────────────
+echo "--- Configuring Fallback Static IP (192.168.1.250) ---"
+# Detect the primary ethernet interface
+ETH_IFACE=$(ip link show 2>/dev/null | grep -E '^[0-9]+: (eth|en)' | head -1 | awk '{print $2}' | tr -d ':')
+if [ -z "$ETH_IFACE" ]; then
+    # Fallback: first non-loopback, non-wifi interface
+    ETH_IFACE=$(ip link show 2>/dev/null | grep -v 'LOOPBACK\|wlan\|wl' | grep -E '^[0-9]+: [a-z]' | head -1 | awk '{print $2}' | tr -d ':')
+fi
+if [ -n "$ETH_IFACE" ]; then
+    cat > /etc/systemd/system/scoreboard-fallback-ip.service <<EOF
+[Unit]
+Description=Scoreboard fallback static IP 192.168.1.250 on $ETH_IFACE
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/ip addr add 192.168.1.250/24 dev $ETH_IFACE
+ExecStartPost=/sbin/ip link set $ETH_IFACE up
+ExecStop=/sbin/ip addr del 192.168.1.250/24 dev $ETH_IFACE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable scoreboard-fallback-ip.service
+    systemctl restart scoreboard-fallback-ip.service 2>/dev/null || true
+    echo "Fallback IP 192.168.1.250 enabled on $ETH_IFACE"
+else
+    echo "WARNING: No ethernet interface detected — skipping fallback IP setup."
+fi
 echo ""
 
 # ─── PERMISSIONS ─────────────────────────────────────────────────────────────

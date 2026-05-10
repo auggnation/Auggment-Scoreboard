@@ -296,12 +296,19 @@ def get_settings():
             "check_hours": 6,
             "auto_apply": False,
         },
+        "slide_duration": 8,
     }
     if not os.path.exists(SETTINGS_FILE):
         return default
     try:
         with open(SETTINGS_FILE, 'r') as f:
-            return {**default, **json.load(f)}
+            loaded = json.load(f)
+        merged = {**default, **loaded}
+        # Deep merge nested dicts so missing sub-keys fall back to defaults
+        for key in ('update', 'colors', 'schedule'):
+            if key in default and isinstance(default[key], dict):
+                merged[key] = {**default[key], **loaded.get(key, {})}
+        return merged
     except Exception:
         return default
 
@@ -1004,6 +1011,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
 
                         race_name = event.get('shortName') or event.get('name', 'Race')
                         race_cards.append({
+                            "league_path": path,
                             "league_label": league_label,
                             "race_name": race_name,
                             "color_state": color_state,
@@ -1086,6 +1094,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
 
                         tournament_name = event.get('shortName') or event.get('name', 'Tournament')
                         golf_cards.append({
+                            "league_path": path,
                             "league_label": LEAGUE_LABELS.get(path, 'PGA'),
                             "tournament_name": tournament_name,
                             "color_state": color_state,
@@ -1167,6 +1176,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                     if is_fav and event_local_date >= fav_min_date and game_key not in fav_card_keys:
                         fav_card_keys.add(game_key)
                         fav_cards.append({
+                            "league_path": path,
                             "league_label": LEAGUE_LABELS.get(path, league.upper()),
                             "home_name": h_abbr, "away_name": a_abbr,
                             "home_score": h_score, "away_score": a_score,
@@ -1206,6 +1216,8 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
         "theme": settings.get('theme', 'dark'),
         "colors": settings.get('colors', {}),
         "font_primary": settings.get('font_primary', 'Barlow Condensed'),
+        "slide_playlist": settings.get('slide_playlist', []),
+        "slide_duration": settings.get('slide_duration', 8),
         "cache_updated_at": _espn_cache.get("updated_at"),
         "settings_updated_at": settings.get('last_saved', ''),
         "app_version": _read_version(),
@@ -1498,7 +1510,8 @@ def backend_restart():
 # ─── WIFI MANAGEMENT ───
 
 def _wifi_tool():
-    """Returns ('nmcli', iface) or ('wpa', iface) or (None, None)."""
+    """Returns ('nmcli'|'iw'|'iwlist', iface) or (None, None)."""
+    # Try nmcli first (NetworkManager)
     try:
         r = subprocess.run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device'],
                            capture_output=True, text=True, timeout=5)
@@ -1508,13 +1521,26 @@ def _wifi_tool():
                 return 'nmcli', p[0]
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
+    # Find wireless interface
+    iface = None
     try:
-        for iface in sorted(os.listdir('/sys/class/net')):
-            if os.path.isdir(f'/sys/class/net/{iface}/wireless'):
-                return 'wpa', iface
+        for name in sorted(os.listdir('/sys/class/net')):
+            if os.path.isdir(f'/sys/class/net/{name}/wireless'):
+                iface = name
+                break
     except Exception:
         pass
-    return None, None
+    if not iface:
+        return None, None
+    # Prefer iw over iwlist
+    for cmd in ('iw', 'iwlist'):
+        try:
+            subprocess.run([cmd, '--version'], capture_output=True, timeout=2)
+            return ('iw' if cmd == 'iw' else 'iwlist'), iface
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+    # wpa_supplicant/wpa_cli without a scan tool — still usable for connect
+    return 'wpa', iface
 
 
 @app.route('/api/wifi/status')
@@ -1552,9 +1578,12 @@ def wifi_status():
                             pass
                         break
         else:
-            r = subprocess.run(['cat', f'/sys/class/net/{iface}/operstate'],
-                               capture_output=True, text=True, timeout=3)
-            info['connected'] = r.stdout.strip() == 'up'
+            # iw / iwlist / wpa fallback
+            try:
+                with open(f'/sys/class/net/{iface}/operstate') as f:
+                    info['connected'] = f.read().strip() == 'up'
+            except Exception:
+                pass
             if info['connected']:
                 r2 = subprocess.run(['ip', '-4', 'addr', 'show', iface],
                                     capture_output=True, text=True, timeout=3)
@@ -1562,8 +1591,18 @@ def wifi_status():
                     if 'inet ' in line:
                         info['ip'] = line.strip().split()[1].split('/')[0]
                         break
+                # Get SSID via iw if available
                 try:
-                    with open(f'/proc/net/wireless') as f:
+                    ri = subprocess.run(['iw', 'dev', iface, 'info'],
+                                        capture_output=True, text=True, timeout=3)
+                    for line in ri.stdout.splitlines():
+                        if 'ssid' in line.lower():
+                            info['ssid'] = line.strip().split(None, 1)[-1]
+                            break
+                except FileNotFoundError:
+                    pass
+                try:
+                    with open('/proc/net/wireless') as f:
                         for line in f:
                             if iface in line:
                                 parts = line.split()
@@ -1585,7 +1624,7 @@ def wifi_scan():
     try:
         if tool == 'nmcli':
             r = subprocess.run(
-                ['sudo', 'nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
+                ['nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
                  'device', 'wifi', 'list', '--rescan', 'yes'],
                 capture_output=True, text=True, timeout=20)
             for line in r.stdout.splitlines():
@@ -1597,7 +1636,29 @@ def wifi_scan():
                         sig = 0
                     networks.append({'ssid': p[0], 'signal': sig,
                                      'security': p[2] or 'Open', 'active': p[3] == 'yes'})
-        else:
+        elif tool == 'iw':
+            r = subprocess.run(['sudo', 'iw', 'dev', iface, 'scan'],
+                               capture_output=True, text=True, timeout=20)
+            entry = {}
+            for line in r.stdout.splitlines():
+                line = line.strip()
+                if line.startswith('BSS '):
+                    if entry.get('ssid'):
+                        networks.append(entry)
+                    entry = {'ssid': '', 'signal': 0, 'security': 'Open', 'active': False}
+                elif line.startswith('SSID:'):
+                    entry['ssid'] = line[5:].strip()
+                elif line.startswith('signal:'):
+                    try:
+                        dbm = float(line.split(':')[1].split()[0])
+                        entry['signal'] = max(0, min(100, int(dbm + 110)))
+                    except Exception:
+                        pass
+                elif 'RSN:' in line or 'WPA:' in line:
+                    entry['security'] = 'WPA2' if 'RSN' in line else 'WPA'
+            if entry.get('ssid'):
+                networks.append(entry)
+        elif tool == 'iwlist':
             r = subprocess.run(['sudo', 'iwlist', iface, 'scan'],
                                capture_output=True, text=True, timeout=15)
             ssid, sig, sec = '', 0, 'Open'
@@ -1619,6 +1680,8 @@ def wifi_scan():
                     ssid, sig, sec = '', 0, 'Open'
             if ssid:
                 networks.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+        else:
+            return jsonify({'networks': [], 'error': 'No scan tool available (install iw or network-manager)'})
     except Exception as e:
         return jsonify({'networks': [], 'error': str(e)})
 
@@ -1644,7 +1707,7 @@ def wifi_connect():
         return jsonify({'ok': False, 'error': 'No wireless interface found'})
     try:
         if tool == 'nmcli':
-            cmd = ['sudo', 'nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', iface]
+            cmd = ['nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', iface]
             if password:
                 cmd += ['password', password]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -1652,22 +1715,38 @@ def wifi_connect():
             msg = (r.stdout.strip() or r.stderr.strip()).splitlines()[0] if (r.stdout or r.stderr) else ''
             return jsonify({'ok': ok, 'message': msg})
         else:
-            if not password:
-                return jsonify({'ok': False, 'error': 'wpa_supplicant requires a password'})
-            conf_path = f'/etc/wpa_supplicant/wpa_supplicant.conf'
-            block = f'\nnetwork={{\n    ssid="{ssid}"\n    psk="{password}"\n}}\n'
-            try:
-                with open(conf_path, 'r') as f:
-                    content = f.read()
-                if f'ssid="{ssid}"' not in content:
-                    with open(conf_path, 'a') as f:
-                        f.write(block)
-            except FileNotFoundError:
-                with open(conf_path, 'w') as f:
-                    f.write(f'ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\nupdate_config=1\ncountry=US{block}')
-            subprocess.run(['sudo', 'wpa_cli', '-i', iface, 'reconfigure'],
-                           capture_output=True, timeout=10)
-            return jsonify({'ok': True, 'message': 'Config updated. Reconnecting…'})
+            # iw / iwlist: connect via wpa_cli runtime commands (no file writes needed)
+            def _wpa(args, **kw):
+                # Try without sudo first (works if user is in netdev group),
+                # then fall back to sudo using the existing sudoers entry.
+                for prefix in ([], ['sudo']):
+                    r = subprocess.run(prefix + ['wpa_cli', '-i', iface] + args,
+                                       capture_output=True, text=True, timeout=10, **kw)
+                    if r.returncode == 0:
+                        return r
+                return r  # return last attempt even if failed
+
+            # Add a new network slot
+            r = _wpa(['add_network'])
+            net_id = r.stdout.strip().split('\n')[-1].strip()
+            if not net_id.isdigit():
+                return jsonify({'ok': False, 'error': f'wpa_cli add_network failed: {r.stderr.strip() or r.stdout.strip()}'})
+
+            # Configure the network
+            _wpa(['set_network', net_id, 'ssid', f'"{ssid}"'])
+            if password:
+                _wpa(['set_network', net_id, 'psk', f'"{password}"'])
+            else:
+                _wpa(['set_network', net_id, 'key_mgmt', 'NONE'])
+
+            # Enable and switch to this network
+            _wpa(['enable_network', net_id])
+            _wpa(['select_network', net_id])
+
+            # Persist to config file if wpa_supplicant was started with update_config=1
+            _wpa(['save_config'])
+
+            return jsonify({'ok': True, 'message': f'Connecting to "{ssid}"…'})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
@@ -1680,10 +1759,32 @@ def wifi_disconnect():
         return jsonify({'ok': False, 'error': 'No wireless interface found'})
     try:
         if tool == 'nmcli':
-            r = subprocess.run(['sudo', 'nmcli', 'device', 'disconnect', iface],
+            r = subprocess.run(['nmcli', 'device', 'disconnect', iface],
                                capture_output=True, text=True, timeout=10)
             return jsonify({'ok': r.returncode == 0, 'message': r.stdout.strip() or r.stderr.strip()})
-        return jsonify({'ok': False, 'error': 'Not supported without nmcli'})
+
+        # wpa_cli fallback: disconnect + disable all networks to prevent auto-reconnect
+        def _wpa(args):
+            for prefix in ([], ['sudo']):
+                r = subprocess.run(prefix + ['wpa_cli', '-i', iface] + args,
+                                   capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    return r
+            return r
+
+        # Disconnect
+        _wpa(['disconnect'])
+
+        # Disable all configured networks so supplicant won't auto-reconnect
+        r_list = _wpa(['list_networks'])
+        if r_list and r_list.returncode == 0:
+            for line in r_list.stdout.splitlines():
+                parts = line.strip().split('\t')
+                if parts and parts[0].isdigit():
+                    _wpa(['disable_network', parts[0]])
+
+        _wpa(['save_config'])
+        return jsonify({'ok': True, 'message': 'Disconnected.'})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
