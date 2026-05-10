@@ -1,7 +1,8 @@
 # Auggmented Scoreboard
 
 Auggmented Scoreboard is a Python-based web application designed to turn any TV into a dynamic sports ticker and schedule board. Developed for professional and local sports enthusiasts, it fetches real-time data from ESPN and integrates local school schedules via RSS, iCal, or MaxPreps feeds.
-![Alt Text](images/Screenshot 2026-05-02 090657.png)
+
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard1.png)
 ## What It Does
 
 * Live Scores & Tickers: Displays real-time scores for NFL, MLB, NBA, NHL, and more.
@@ -84,3 +85,10 @@ Auggmented Scoreboard is a Python-based web application designed to turn any TV 
  * Data Not Updating: Check the backend logs with journalctl -u scoreboard -f and verify the machine has internet access to reach ESPN’s APIs.
 
  * Sudo Errors: The app requires specific NOPASSWD entries in /etc/sudoers.d/scoreboard to control the display and services from the web UI. These are created automatically by the installer.
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard2.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard3.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard4.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard5.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard6.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard7.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard.png)
