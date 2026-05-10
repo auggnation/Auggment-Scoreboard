@@ -85,10 +85,10 @@ Auggmented Scoreboard is a Python-based web application designed to turn any TV 
  * Data Not Updating: Check the backend logs with journalctl -u scoreboard -f and verify the machine has internet access to reach ESPN’s APIs.
 
  * Sudo Errors: The app requires specific NOPASSWD entries in /etc/sudoers.d/scoreboard to control the display and services from the web UI. These are created automatically by the installer.
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard2.png)
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard3.png)
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard4.png)
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard5.png)
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard6.png)
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard7.png)
-![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/Scoreboard.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard2.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard3.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard4.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard5.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard6.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard7.png)
+![Scoreboard](https://raw.githubusercontent.com/auggnation/Auggment-Scoreboard/main/Images/scoreboard.png)
