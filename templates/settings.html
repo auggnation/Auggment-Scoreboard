@@ -1,0 +1,2479 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ username }} Settings</title>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="pg-settings">
+<header>
+    <h1>{{ username | upper }} SETTINGS</h1>
+    <div class="header-right">
+        <button class="btn btn-save" onclick="saveSettings()">SAVE</button>
+        <a href="/logout"><button class="btn btn-logout">LOGOUT</button></a>
+    </div>
+</header>
+
+<div class="container">
+
+    <div class="section-pair">
+
+    <!-- ── Device Mode ── -->
+    <div class="section section-compact">
+        <div class="section-title">Device Mode</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:18px;">
+            Choose whether this device is the central data server or a display kiosk. Save after changing modes.
+        </p>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <button class="mode-btn" data-mode="server" onclick="setMode('server')">
+                SERVER
+                <span style="display:block;font-size:12px;font-weight:400;letter-spacing:0;opacity:0.7;margin-top:4px;">Download &amp; serve scores</span>
+            </button>
+            <button class="mode-btn" data-mode="kiosk" onclick="setMode('kiosk')">
+                KIOSK
+                <span style="display:block;font-size:12px;font-weight:400;letter-spacing:0;opacity:0.7;margin-top:4px;">Display from a server</span>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- ── Server Options (server mode only) ── -->
+    <div class="section server-only" id="server-options-section">
+        <div class="section-title">Server Options</div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">
+            <input type="checkbox" id="server_enable_display" style="width:20px;height:20px;cursor:pointer;accent-color:var(--accent);">
+            <label style="margin:0;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;cursor:pointer;" for="server_enable_display">
+                Show scoreboard display on this server
+            </label>
+        </div>
+        <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:20px;">
+            Uncheck to run this device as a data-only backend — no scoreboard will be shown here.
+        </p>
+
+        <!-- Cache Status -->
+        <div class="info-box">
+            <div class="info-box-title">DATA CACHE</div>
+            <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:8px;">
+                Sports scores are downloaded every 11 minutes in the background.
+            </p>
+            <div id="cache-status-text" style="font-size:14px;font-family:'Barlow',sans-serif;color:#555;">Last updated: —</div>
+            <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn" style="background:#1a1a1a;color:var(--accent);border:1px solid #333;font-size:15px;padding:8px 18px;" onclick="refreshCacheStatus()">CHECK STATUS</button>
+                <button id="force-refresh-btn" class="btn" style="background:#001a07;color:#00E676;border:1px solid #00E676;font-size:15px;padding:8px 18px;" onclick="forceRefreshCache()">FORCE REFRESH</button>
+            </div>
+        </div>
+
+        <!-- Pairing Code -->
+        <div class="info-box">
+            <div class="info-box-title">KIOSK PAIRING</div>
+            <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:12px;">
+                Generate a one-time code to authorize a kiosk to connect. Expires in 10 minutes, single use only.
+            </p>
+            <button class="btn btn-save" style="font-size:16px;padding:10px 22px;" onclick="generatePairingCode()">GENERATE PAIRING CODE</button>
+            <div id="pairing-code-display" style="display:none;">
+                <div class="pairing-code-box">
+                    <div style="font-size:13px;color:#666;font-family:'Barlow',sans-serif;letter-spacing:1px;margin-bottom:8px;">ONE-TIME PAIRING CODE</div>
+                    <div id="pairing-code-value" class="pairing-code-value"></div>
+                    <div id="pairing-code-expires" style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-top:8px;"></div>
+                </div>
+                <p id="pairing-code-timer" style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;text-align:center;"></p>
+            </div>
+        </div>
+
+        <!-- Connected Kiosks -->
+        <div>
+            <div style="font-size:15px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">CONNECTED KIOSKS</div>
+            <div id="kiosks-list"><p style="color:#444;font-family:'Barlow',sans-serif;font-size:14px;">Loading…</p></div>
+            <button class="btn" style="margin-top:10px;background:#1a1a1a;color:#888;border:1px solid #333;font-size:15px;padding:8px 18px;" onclick="loadKiosks()">REFRESH</button>
+        </div>
+    </div>
+
+
+    <!-- ── Kiosk Setup (kiosk mode only) ── -->
+    <div class="section kiosk-only" id="kiosk-setup-section" style="display:none;flex:1">
+        <div class="section-title">Kiosk Setup</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
+            Connect this kiosk to a Scoreboard server. You need a pairing code generated from the server's settings page.
+        </p>
+
+        <!-- Connection status -->
+        <div class="info-box" id="kiosk-status-box">
+            <div class="info-box-title">CONNECTION STATUS</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <span id="kiosk-conn-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;flex-shrink:0;"></span>
+                <span id="kiosk-conn-text" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">NOT CONNECTED</span>
+            </div>
+            <div id="kiosk-server-name" style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;"></div>
+            <button class="btn" id="kiosk-disconnect-btn" style="display:none;margin-top:10px;background:#FF1744;color:white;font-size:14px;padding:8px 18px;" onclick="disconnectKiosk()">DISCONNECT</button>
+        </div>
+
+        <!-- Connect form -->
+        <div id="kiosk-connect-form">
+            <label>Kiosk Name</label>
+            <input type="text" id="kiosk_name_input" placeholder="Display 1">
+
+            <label>Server URL</label>
+            <input type="text" id="server_url_input" placeholder="http://192.168.1.100:5000">
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:4px;">
+                Include <code style="color:#aaa">http://</code> and the port (default 5000).
+            </p>
+
+            <label>Pairing Code</label>
+            <input type="text" id="pairing_code_input" placeholder="ABC123" maxlength="6"
+                   style="text-transform:uppercase;letter-spacing:6px;font-size:28px;font-weight:900;"
+                   oninput="this.value=this.value.toUpperCase()">
+
+            <div style="margin-top:18px;display:flex;gap:12px;align-items:center;">
+                <button class="btn btn-save" style="font-size:16px;padding:10px 22px;" onclick="connectKiosk()">CONNECT TO SERVER</button>
+                <span id="kiosk-connect-msg" style="font-size:15px;font-family:'Barlow',sans-serif;color:#555;"></span>
+            </div>
+        </div>
+    </div>
+
+
+    </div><!-- /section-pair: Device Mode + Server/Kiosk -->
+
+    <!-- ── Display Settings ── -->
+    <div class="section">
+        <div class="section-title">Display Settings</div>
+        <div class="row">
+            <div>
+                <label>Scoreboard Name</label>
+                <input type="text" id="display_name" placeholder="Scoreboard">
+            </div>
+            <div>
+                <label>City (for weather)</label>
+                <input type="text" id="city" placeholder="Auburn, NE">
+            </div>
+        </div>
+        <div class="row" style="margin-top:16px;">
+            <div>
+                <label>Timezone</label>
+                <select id="timezone">
+                    <option value="America/New_York">Eastern</option>
+                    <option value="America/Chicago" selected>Central</option>
+                    <option value="America/Denver">Mountain</option>
+                    <option value="America/Los_Angeles">Pacific</option>
+                    <option value="America/Anchorage">Alaska</option>
+                    <option value="Pacific/Honolulu">Hawaii</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-top:24px;">
+            <label style="margin-bottom:10px;">Orientation</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="sp-toggle-btn orient-btn active" data-val="auto" style="text-align:center;">
+                    AUTO<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">Detect screen</span>
+                </button>
+                <button class="sp-toggle-btn orient-btn" data-val="horizontal" style="text-align:center;">
+                    HORIZONTAL<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">TV landscape 1920×1080</span>
+                </button>
+                <button class="sp-toggle-btn orient-btn" data-val="vertical" style="text-align:center;">
+                    VERTICAL<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">TV portrait 1080×1920</span>
+                </button>
+                <button class="sp-toggle-btn orient-btn" data-val="phone" style="text-align:center;">
+                    PHONE<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">Mobile browser</span>
+                </button>
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">
+                Vertical and Phone both put the away team on top.
+            </p>
+        </div>
+
+        <div style="margin-top:24px;">
+            <label style="margin-bottom:12px;">Theme</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <button class="theme-btn" data-val="dark">🌙 DARK</button>
+                <button class="theme-btn" data-val="light">☀️ LIGHT</button>
+            </div>
+        </div>
+
+        <div style="margin-top:24px;">
+            <label style="margin-bottom:10px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Display Font</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;" id="font-picker">
+                <button class="sp-toggle-btn font-btn active" data-font="Barlow Condensed">Barlow Condensed</button>
+                <button class="sp-toggle-btn font-btn" data-font="Bebas Neue">Bebas Neue</button>
+                <button class="sp-toggle-btn font-btn" data-font="Oswald">Oswald</button>
+                <button class="sp-toggle-btn font-btn" data-font="Roboto Condensed">Roboto Condensed</button>
+                <button class="sp-toggle-btn font-btn" data-font="Anton">Anton</button>
+                <button class="sp-toggle-btn font-btn" data-font="Exo 2">Exo 2</button>
+                <button class="sp-toggle-btn font-btn" data-font="Teko">Teko</button>
+                <button class="sp-toggle-btn font-btn" data-font="Saira Condensed">Saira Condensed</button>
+                <button class="sp-toggle-btn font-btn" data-font="Rajdhani">Rajdhani</button>
+                <button class="sp-toggle-btn font-btn" data-font="Syncopate">Syncopate</button>
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">Applied to scores, team names, and all headings on the scoreboard.</p>
+        </div>
+
+        <div style="margin-top:28px;">
+            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Header &amp; Info</label>
+            <div class="color-grid">
+                <div class="color-item"><label>Display Name &amp; Clock</label><input type="color" id="header_color" value="#F5A800"></div>
+                <div class="color-item"><label>Weather</label><input type="color" id="color_weather" value="#dddddd"></div>
+            </div>
+        </div>
+
+        <div style="margin-top:22px;">
+            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Game Cards</label>
+            <div class="color-grid">
+                <div class="color-item"><label>League Tag</label><input type="color" id="color_league_label" value="#099afc"></div>
+                <div class="color-item"><label>VS Label</label><input type="color" id="color_vs_color" value="#ffffff"></div>
+                <div class="color-item"><label>Game Time / Date</label><input type="color" id="color_pre_time" value="#ffffff"></div>
+                <div class="color-item"><label>Score Separator ( – )</label><input type="color" id="color_score_sep" value="#888888"></div>
+                <div class="color-item"><label>Live Score</label><input type="color" id="color_live" value="#00E676"></div>
+                <div class="color-item"><label>Final Score</label><input type="color" id="color_final" value="#FF1744"></div>
+                <div class="color-item"><label>Score Update Flash</label><input type="color" id="color_flash" value="#FFD600"></div>
+                <div class="color-item"><label>Winner Score &amp; Name</label><input type="color" id="color_winner" value="#00E676"></div>
+                <div class="color-item"><label>Loser Score &amp; Name</label><input type="color" id="color_loser" value="#FF1744"></div>
+                <div class="color-item"><label>Tied Score</label><input type="color" id="color_tie_score" value="#FFD600"></div>
+                <div class="color-item"><label>Team Abbreviation</label><input type="color" id="color_team_abbr" value="#ffffff"></div>
+                <div class="color-item"><label>Fav Team Name</label><input type="color" id="color_fav_abbr" value="#F5A800"></div>
+                <div class="color-item"><label>Fav Team Score</label><input type="color" id="color_fav_score" value="#F5A800"></div>
+            </div>
+        </div>
+
+        <div style="margin-top:22px;">
+            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Ticker</label>
+            <div class="color-grid">
+                <div class="color-item"><label>Default Text</label><input type="color" id="color_ticker_base" value="#ffffff"></div>
+                <div class="color-item"><label>Live Game Items</label><input type="color" id="color_ticker_live" value="#00E676"></div>
+                <div class="color-item"><label>Final Game Items</label><input type="color" id="color_ticker_final" value="#FF1744"></div>
+                <div class="color-item"><label>Separator ( · ///)</label><input type="color" id="color_ticker_sep" value="#444444"></div>
+            </div>
+        </div>
+
+        <div style="margin-top:22px;">
+            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Racing &amp; Golf Cards</label>
+            <div class="color-grid">
+                <div class="color-item"><label>Car Number / Strokes</label><input type="color" id="color_nascar_num" value="#FFD600"></div>
+                <div class="color-item"><label>Position (1st, 2nd…)</label><input type="color" id="color_race_pos" value="#F5A800"></div>
+                <div class="color-item"><label>Laps Left / Hole Info</label><input type="color" id="color_race_laps" value="#888888"></div>
+                <div class="color-item"><label>Race / Tournament Name</label><input type="color" id="color_card_subtext" value="#555555"></div>
+            </div>
+        </div>
+
+        <div style="margin-top:28px;">
+            <label style="margin-bottom:4px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">🌙 Dark Mode Surfaces</label>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Background, cards, and borders when dark theme is active.</p>
+            <div class="color-grid">
+                <div class="color-item">
+                    <label>Body Background</label>
+                    <input type="color" id="color_dark_bg" value="#080808">
+                </div>
+                <div class="color-item">
+                    <label>Card Background</label>
+                    <input type="color" id="color_dark_card" value="#111111">
+                </div>
+                <div class="color-item">
+                    <label>Borders &amp; Dividers</label>
+                    <input type="color" id="color_dark_border" value="#2a2a2a">
+                </div>
+                <div class="color-item">
+                    <label>VS / Pre-game Text</label>
+                    <input type="color" id="color_dark_vs" value="#ffffff">
+                </div>
+                <div class="color-item">
+                    <label>Ticker Background</label>
+                    <input type="color" id="color_dark_ticker_bg" value="#000000">
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:28px;">
+            <label style="margin-bottom:4px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">☀️ Light Mode Surfaces</label>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Base hue for the frosted-glass background gradient. Cards and header will tint from this.</p>
+            <div class="color-grid">
+                <div class="color-item">
+                    <label>Background Tint</label>
+                    <input type="color" id="color_light_bg" value="#c4d6f0">
+                </div>
+                <div class="color-item">
+                    <label>Card / Glass Tint</label>
+                    <input type="color" id="color_light_card" value="#ffffff">
+                </div>
+                <div class="color-item">
+                    <label>Border / Glow</label>
+                    <input type="color" id="color_light_border" value="#ffffff">
+                </div>
+                <div class="color-item">
+                    <label>VS / Pre-game Text</label>
+                    <input type="color" id="color_light_vs" value="#445566">
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="section-pair">
+
+    <!-- ── Logo ── -->
+    <div class="section section-compact">
+        <div class="section-title">Logo</div>
+        <div id="logo-preview-wrap" style="text-align:center;margin-bottom:12px;min-height:80px;">
+            <img id="logo-preview" src="/static/uploads/logo.png" alt="Current logo"
+                 style="max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;border:1px solid #2a2a2a;background:#000;padding:8px;"
+                 onerror="this.style.display='none';document.getElementById('logo-none-msg').style.display='block';">
+            <p id="logo-none-msg" style="display:none;color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin:0;">No logo uploaded yet.</p>
+        </div>
+        <div class="upload-area" onclick="document.getElementById('logo-input').click()">
+            <p>Click to upload logo (PNG recommended)</p>
+        </div>
+        <input type="file" id="logo-input" accept="image/*" style="display:none" onchange="uploadLogo(this)">
+        <p id="upload-status" style="color:#555;margin-top:10px;font-family:'Barlow',sans-serif;font-size:15px;"></p>
+    </div>
+
+
+    <!-- ── Specials ── -->
+    <div class="section">
+        <div class="section-title">Specials / Custom Slides</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Custom slides shown between score cards. Drag to set order.
+        </p>
+        <div id="specials-list"></div>
+        <button class="btn btn-save" style="margin-top:14px;background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);" onclick="addSpecial()">+ ADD SPECIAL</button>
+    </div>
+
+
+    </div><!-- /section-pair: Logo + Specials -->
+
+
+    <!-- ── Slide Order ── -->
+    <div class="section" id="slide-order-section">
+        <div class="section-title">Slide Order</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">
+            Drag to set the exact order every slide appears on screen. Sport cards only show when that team/driver/golfer has an active event.
+        </p>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Each slide shows for</label>
+            <input type="number" id="slide_duration" min="2" max="120" step="1"
+                   style="width:72px;padding:8px 10px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:8px;font-size:18px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">seconds</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;flex-shrink:0;">Transition</label>
+            <button class="trans-btn" data-val="slide-right" onclick="setTransition('slide-right')">→ FROM RIGHT</button>
+            <button class="trans-btn" data-val="slide-left"  onclick="setTransition('slide-left')">← FROM LEFT</button>
+            <button class="trans-btn" data-val="slide-top"   onclick="setTransition('slide-top')">↑ FROM TOP</button>
+            <button class="trans-btn" data-val="slide-bottom" onclick="setTransition('slide-bottom')">↓ FROM BELOW</button>
+            <button class="trans-btn" data-val="fade"        onclick="setTransition('fade')">◎ FADE</button>
+        </div>
+        <div id="playlist-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <p style="color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin-top:10px;">
+            Favorites and custom slides are added here automatically. Remove from their respective sections to take them out of the rotation.
+        </p>
+    </div>
+
+
+    <div class="section-pair">
+
+    <!-- ── Favorite Teams ── -->
+    <div class="section" style="flex:1;min-width:300px;">
+        <div class="section-title">Favorite Teams (Score Cards)</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">Select a league to browse teams. Click to add/remove.</p>
+        <select id="team-league-select" onchange="loadTeams(this.value)">
+            <option value="">— Pick a league —</option>
+            <option value="football/nfl">NFL</option>
+            <option value="baseball/mlb">MLB</option>
+            <option value="basketball/nba">NBA</option>
+            <option value="basketball/wnba">WNBA</option>
+            <option value="hockey/nhl">NHL</option>
+            <option value="soccer/usa.1">MLS</option>
+            <option value="soccer/usa.nwsl">NWSL</option>
+            <option value="soccer/eng.1">EPL</option>
+            <option value="soccer/eng.2">EFL Champ</option>
+            <option value="soccer/esp.1">La Liga</option>
+            <option value="soccer/ger.1">Bundesliga</option>
+            <option value="football/college-football">CFB</option>
+            <option value="basketball/mens-college-basketball">CBK</option>
+            <option value="basketball/womens-college-basketball">WCBK</option>
+            <option value="baseball/college-baseball">CBB</option>
+            <option value="softball/college-softball">CSB</option>
+            <option value="volleyball/womens-college-volleyball">CVB</option>
+            <option value="soccer/usa.usl.1">USL Championship</option>
+            <option value="soccer/usa.usl.l1">USL League One</option>
+            <option value="baseball/milb">MiLB</option>
+            <option value="soccer/fifa.world">World Cup</option>
+            <option value="soccer/fifa.wwc">Women's WC</option>
+            <option value="lacrosse/pll">PLL</option>
+            <option value="lacrosse/nll">NLL</option>
+        </select>
+        <div id="team-list"><p style="color:#444;font-family:'Barlow',sans-serif;">Select a league above.</p></div>
+        <div id="fav-list"></div>
+    </div>
+
+    <!-- ── Event Windows ── -->
+    <div class="section" id="event-windows-section" style="flex:0 0 auto;min-width:260px;max-width:380px;">
+        <div class="section-title">Event Windows</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;">
+            Days of past scores and upcoming events per league.
+        </p>
+        <div id="event-windows-grid" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    </div><!-- /section-pair: Favorite Teams + Event Windows -->
+
+
+    <!-- ── Favorite NASCAR Drivers ── -->
+    <div class="section" id="nascar-fav-section">
+        <div class="section-title">Favorite NASCAR Drivers</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add drivers by name or car number. They will be highlighted in the NASCAR leaderboard and shown even if outside top 10.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="nascar-fav-input" placeholder="e.g. Denny Hamlin or 11"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addNascarFavorite()">
+            <button onclick="addNascarFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="nascar-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+
+    <!-- ── Favorite IndyCar Drivers ── -->
+    <div class="section" id="indycar-fav-section">
+        <div class="section-title">Favorite IndyCar Drivers</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add drivers by name or car number. Highlighted in the IndyCar leaderboard and shown even if outside top 10.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="indycar-fav-input" placeholder="e.g. Scott Dixon or 9"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addIndycarFavorite()">
+            <button onclick="addIndycarFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="indycar-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+
+    <!-- ── Favorite F1 Drivers ── -->
+    <div class="section" id="f1-fav-section">
+        <div class="section-title">Favorite F1 Drivers</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add drivers by name or car number. Highlighted in the F1 leaderboard and shown even if outside top 10.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="f1-fav-input" placeholder="e.g. Max Verstappen or 1"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addF1Favorite()">
+            <button onclick="addF1Favorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="f1-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+
+    <!-- ── Favorite Golfers ── -->
+    <div class="section" id="golf-fav-section">
+        <div class="section-title">Favorite Golfers (PGA)</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add golfer names to highlight them in the PGA leaderboard. Requires PGA enabled in Leagues above.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="golf-fav-input" placeholder="e.g. Rory McIlroy"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addGolfFavorite()">
+            <button onclick="addGolfFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="golf-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+
+    <!-- ── Leagues ── -->
+    <div class="section">
+        <div class="section-title">Leagues (Ticker)</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;" id="leagues-note"></p>
+        <div class="league-grid" id="league-grid">
+            <div class="league-check" data-val="football/nfl"><span>NFL</span></div>
+            <div class="league-check" data-val="baseball/mlb"><span>MLB</span></div>
+            <div class="league-check" data-val="basketball/nba"><span>NBA</span></div>
+            <div class="league-check" data-val="basketball/wnba"><span>WNBA</span></div>
+            <div class="league-check" data-val="hockey/nhl"><span>NHL</span></div>
+            <div class="league-check" data-val="soccer/usa.1"><span>MLS</span></div>
+            <div class="league-check" data-val="soccer/usa.nwsl"><span>NWSL</span></div>
+            <div class="league-check" data-val="soccer/eng.1"><span>EPL</span></div>
+            <div class="league-check" data-val="soccer/eng.2"><span>EFL Champ</span></div>
+            <div class="league-check" data-val="soccer/esp.1"><span>La Liga</span></div>
+            <div class="league-check" data-val="soccer/ger.1"><span>Bundesliga</span></div>
+            <div class="league-check" data-val="football/college-football"><span>CFB</span></div>
+            <div class="league-check" data-val="basketball/mens-college-basketball"><span>CBK</span></div>
+            <div class="league-check" data-val="basketball/womens-college-basketball"><span>WCBK</span></div>
+            <div class="league-check" data-val="baseball/college-baseball"><span>CBB</span></div>
+            <div class="league-check" data-val="softball/college-softball"><span>CSB</span></div>
+            <div class="league-check" data-val="volleyball/womens-college-volleyball"><span>CVB</span></div>
+            <div class="league-check" data-val="soccer/usa.usl.1"><span>USL Champ</span></div>
+            <div class="league-check" data-val="soccer/usa.usl.l1"><span>USL L1</span></div>
+            <div class="league-check" data-val="baseball/milb"><span>MiLB</span></div>
+            <div class="league-check" data-val="soccer/fifa.world"><span>World Cup</span></div>
+            <div class="league-check" data-val="soccer/fifa.wwc"><span>Women's WC</span></div>
+            <div class="league-check" data-val="racing/nascar-cup"><span>NASCAR</span></div>
+            <div class="league-check" data-val="racing/irl"><span>IndyCar</span></div>
+            <div class="league-check" data-val="racing/f1"><span>F1</span></div>
+            <div class="league-check" data-val="golf/pga"><span>PGA</span></div>
+            <div class="league-check" data-val="lacrosse/pll"><span>PLL</span></div>
+            <div class="league-check" data-val="lacrosse/nll"><span>NLL</span></div>
+        </div>
+    </div>
+
+
+    <!-- ── College Conference Filters ── -->
+    <div class="section" id="conf-section">
+        <div class="section-title">College Conference Filters (Ticker)</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Select one or more conferences per league to filter the ticker. Select none to show all games.
+        </p>
+        <p id="conf-empty-msg" style="color:#444;font-family:'Barlow',sans-serif;font-size:15px;">Select a college league above to configure conference filters.</p>
+        <div class="conf-grid" id="conf-grid"></div>
+    </div>
+
+
+    <!-- ── Local Schedule ── -->
+    <div class="section">
+        <div class="section-title">Local Schedule</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
+            Enter local games (high school, club, etc.) to show as slides and in the ticker — no live scoring. Optionally pull from an RSS feed.
+        </p>
+
+        <div id="rss-feeds-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;"></div>
+        <button class="btn btn-save" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);margin-bottom:20px;" onclick="addRssFeed()">+ ADD RSS FEED</button>
+
+        <div id="schedule-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+        <button class="btn btn-save" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);" onclick="addScheduleEntry()">+ ADD GAME</button>
+    </div>
+
+
+    <div class="section-pair">
+
+    <!-- ── Kiosk Control ── -->
+    <div class="section">
+        <div class="section-title">Kiosk Control</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:12px;">
+            Controls the kiosk browser (Chrome). Restart resets a frozen display.
+        </p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button class="btn" onclick="kioskAction('restart')" style="background:var(--accent);color:#000;font-size:16px;padding:10px 22px;">RESET KIOSK</button>
+            <button class="btn" onclick="kioskAction('stop')"    style="background:#FF1744;color:white;font-size:16px;padding:10px 22px;">STOP KIOSK</button>
+            <button class="btn" onclick="kioskAction('start')"   style="background:#00E676;color:#000;font-size:16px;padding:10px 22px;">START KIOSK</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
+            <span style="font-size:14px;color:#555;font-family:'Barlow',sans-serif;">STATUS:</span>
+            <span id="kiosk-status-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;"></span>
+            <span id="kiosk-status-text" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">—</span>
+        </div>
+        <p id="kiosk-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
+
+        <div style="margin-top:24px;margin-bottom:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+            <div>
+                <label style="display:block;margin-bottom:6px;">Server Port</label>
+                <input type="number" id="server_port" min="1" max="65535" placeholder="5000" style="width:110px;">
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin:0 0 10px;">
+                Port this device listens on (default 5000). Save then restart backend to apply.
+            </p>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button class="btn" onclick="restartBackend()" style="background:#1565C0;color:white;font-size:16px;padding:10px 22px;">RESTART BACKEND</button>
+        </div>
+        <p id="backend-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
+    </div>
+
+
+    <!-- ── Display Schedule ── -->
+    <div class="section">
+        <div class="section-title">Display Schedule</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
+            Automatically sleep or wake the monitor using <code style="color:#aaa">xset dpms</code>.
+        </p>
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;margin:0;">
+                <input type="checkbox" id="shutdown-enabled" style="width:20px;height:20px;cursor:pointer;accent-color:#FF1744;">
+                Shutdown display at
+            </label>
+            <input type="time" id="shutdown-time" style="width:auto;padding:10px 14px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:20px;font-family:'Barlow Condensed',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;margin:0;">
+                <input type="checkbox" id="startup-enabled" style="width:20px;height:20px;cursor:pointer;accent-color:#00E676;">
+                Wake display at
+            </label>
+            <input type="time" id="startup-time" style="width:auto;padding:10px 14px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:20px;font-family:'Barlow Condensed',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;gap:12px;">
+            <button class="btn" onclick="displayAction('off')" style="background:#FF1744;color:white;font-size:16px;padding:10px 22px;">SLEEP NOW</button>
+            <button class="btn" onclick="displayAction('on')"  style="background:#00E676;color:#000;font-size:16px;padding:10px 22px;">WAKE NOW</button>
+        </div>
+        <p id="display-status" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:10px;"></p>
+    </div>
+
+
+    </div><!-- /section-pair: Kiosk Control + Display Schedule -->
+
+    <!-- ── Wi-Fi ── -->
+    <div class="section" id="wifi-section">
+        <div class="section-title">Wi-Fi</div>
+
+        <!-- Status bar -->
+        <div id="wifi-status-box" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid #222;margin-bottom:18px;flex-wrap:wrap;">
+            <span id="wifi-dot" style="width:12px;height:12px;border-radius:50%;background:#444;flex-shrink:0;display:inline-block;"></span>
+            <span id="wifi-conn-label" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">CHECKING…</span>
+            <span id="wifi-ssid-label" style="font-size:15px;font-family:'Barlow',sans-serif;color:#888;"></span>
+            <span id="wifi-ip-label" style="font-size:13px;font-family:'Barlow',sans-serif;color:#555;margin-left:auto;"></span>
+            <span id="wifi-signal-label" style="font-size:13px;font-family:'Barlow',sans-serif;color:#555;"></span>
+            <button id="wifi-disconnect-btn" onclick="wifiDisconnect()" style="display:none;background:#FF1744;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;letter-spacing:1px;padding:5px 14px;cursor:pointer;">DISCONNECT</button>
+            <span id="wifi-unavail-msg" style="display:none;font-size:13px;font-family:'Barlow',sans-serif;color:#555;">No wireless adapter detected on this device.</span>
+        </div>
+
+        <!-- Available Networks -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <span style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;letter-spacing:1px;">AVAILABLE NETWORKS</span>
+            <button class="btn" id="wifi-scan-btn" onclick="wifiScan()" style="font-size:13px;padding:5px 16px;">SCAN</button>
+        </div>
+        <div id="wifi-networks-list" style="max-height:220px;overflow-y:auto;border:1px solid #222;border-radius:8px;margin-bottom:18px;">
+            <p style="color:#444;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">Press SCAN to search for networks.</p>
+        </div>
+
+        <!-- Connect Form -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:180px;">
+                <div style="font-size:12px;color:#555;font-family:'Barlow',sans-serif;letter-spacing:1px;margin-bottom:4px;">SSID</div>
+                <input type="text" id="wifi-ssid-input" placeholder="Network name" autocomplete="off" style="width:100%;box-sizing:border-box;">
+            </div>
+            <div style="flex:1;min-width:180px;">
+                <div style="font-size:12px;color:#555;font-family:'Barlow',sans-serif;letter-spacing:1px;margin-bottom:4px;">PASSWORD</div>
+                <input type="password" id="wifi-pass-input" placeholder="Leave blank for open networks" autocomplete="new-password" style="width:100%;box-sizing:border-box;">
+            </div>
+            <button class="btn" id="wifi-connect-btn" onclick="wifiConnect()" style="background:var(--accent);color:#000;font-size:15px;padding:10px 22px;flex-shrink:0;">CONNECT</button>
+        </div>
+        <p id="wifi-msg" style="font-size:14px;font-family:'Barlow',sans-serif;color:#555;margin-top:10px;min-height:20px;"></p>
+    </div>
+
+    <!-- ── Software Updates ── -->
+    <div class="section">
+        <div class="section-title">Software Updates</div>
+
+        <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+            <div>
+                <span style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;letter-spacing:1px;">CURRENT VERSION</span>
+                <div id="update-current-ver" style="font-size:32px;font-weight:900;letter-spacing:4px;color:var(--accent);font-family:'Barlow Condensed',sans-serif;">—</div>
+            </div>
+            <div id="update-avail-badge" style="display:none;background:#1a2a00;border:1px solid #00E676;border-radius:8px;padding:8px 16px;">
+                <span style="font-size:13px;color:#00E676;font-weight:700;letter-spacing:1px;">UPDATE AVAILABLE</span>
+                <div id="update-avail-ver" style="font-size:22px;font-weight:900;color:#00E676;font-family:'Barlow Condensed',sans-serif;letter-spacing:2px;"></div>
+            </div>
+        </div>
+
+        <label>Update Source URL</label>
+        <input type="text" id="update_source_url" placeholder="https://api.github.com/repos/you/scoreboard/releases/latest  or  http://192.168.1.10:5000">
+        <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:4px;margin-bottom:16px;">
+            GitHub releases API URL, a custom JSON endpoint, or another Scoreboard server address.
+            Kiosks can leave this blank — they pull updates from their paired server automatically.
+        </p>
+
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;font-size:18px;font-weight:700;color:#ccc;">
+                <input type="checkbox" id="update_auto_check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent);">
+                Auto-check for updates
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;font-size:18px;font-weight:700;color:#ccc;">
+                <input type="checkbox" id="update_auto_apply" style="width:18px;height:18px;cursor:pointer;accent-color:#00E676;">
+                Auto-apply when available
+            </label>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+            <label style="margin:0;font-size:16px;color:#888;">Check every</label>
+            <input type="number" id="update_check_hours" min="1" max="168" step="1"
+                   style="width:80px;padding:8px 12px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:8px;font-size:18px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;">
+            <label style="margin:0;font-size:16px;color:#888;">hours</label>
+        </div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+            <button class="btn" onclick="checkUpdates()" id="check-update-btn"
+                    style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);font-size:16px;padding:10px 22px;">
+                CHECK NOW
+            </button>
+            <button class="btn" onclick="applyUpdate()" id="apply-update-btn" style="display:none;
+                    background:#00E676;color:#000;font-size:16px;padding:10px 22px;">
+                APPLY UPDATE
+            </button>
+            <span id="update-status-msg" style="font-size:15px;font-family:'Barlow',sans-serif;color:#555;"></span>
+        </div>
+        <div id="update-last-checked" style="font-size:13px;color:#444;font-family:'Barlow',sans-serif;margin-top:10px;"></div>
+    </div>
+
+
+    <!-- ── Admin Credentials ── -->
+    <div class="section">
+        <div class="section-title">Admin Credentials</div>
+        <p class="cred-note">Change the username/password used to access this settings page.</p>
+        <div class="row">
+            <div>
+                <label>Username</label>
+                <input type="text" id="admin_username" autocomplete="off">
+            </div>
+            <div>
+                <label>New Password</label>
+                <input type="password" id="admin_password" placeholder="Leave blank to keep current">
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="toast" id="toast">SAVED</div>
+
+<script>
+    let currentSettings = {};
+    let selectedTeams = [];
+    let selectedNascarFavorites = [];
+    let selectedIndycarFavorites = [];
+    let selectedF1Favorites = [];
+    let selectedGolfFavorites = [];
+    let teamMeta = {};
+    let selectedConferences = {};
+    let currentMode = 'server';
+    let pairingCodeTimer = null;
+    let savedDateWindows = {};
+
+    const LEAGUE_LABELS = {
+        "football/nfl": "NFL", "baseball/mlb": "MLB", "basketball/nba": "NBA", "basketball/wnba": "WNBA",
+        "hockey/nhl": "NHL", "soccer/usa.1": "MLS", "soccer/usa.nwsl": "NWSL",
+        "soccer/eng.1": "EPL", "soccer/eng.2": "EFL Champ", "soccer/esp.1": "La Liga", "soccer/ger.1": "Bundesliga",
+        "football/college-football": "CFB", "basketball/mens-college-basketball": "CBK",
+        "basketball/womens-college-basketball": "WCBK", "baseball/college-baseball": "CBB",
+        "softball/college-softball": "CSB", "volleyball/womens-college-volleyball": "CVB",
+        "soccer/fifa.world": "World Cup", "soccer/fifa.wwc": "Women's WC",
+        "soccer/usa.usl.1": "USL Champ", "soccer/usa.usl.l1": "USL L1",
+        "baseball/milb": "MiLB",
+        "racing/nascar-cup": "NASCAR", "racing/irl": "IndyCar", "racing/f1": "F1",
+        "golf/pga": "PGA", "lacrosse/pll": "PLL", "lacrosse/nll": "NLL",
+    };
+
+    const COLLEGE_LEAGUES = new Set([
+        "football/college-football", "basketball/mens-college-basketball",
+        "basketball/womens-college-basketball", "baseball/college-baseball",
+        "softball/college-softball", "volleyball/womens-college-volleyball",
+    ]);
+
+    // ── Slide Playlist (compact chip order) ──
+
+    let slidePlaylist = [];  // [{type, key, label?, icon?}, ...]
+    let _plDragSrc = null;
+
+    const TEAM_ICONS = {
+        'football': '🏈', 'baseball': '⚾', 'basketball': '🏀',
+        'hockey': '🏒', 'soccer': '⚽', 'softball': '🥎',
+        'volleyball': '🏐', 'racing': '🏎️', 'golf': '⛳', 'lacrosse': '🥍',
+    };
+
+    function _sportIcon(leaguePath) {
+        if (!leaguePath) return '📺';
+        return TEAM_ICONS[leaguePath.split('/')[0]] || '📺';
+    }
+
+    function buildPlaylistChip(item, idx) {
+        const el = document.createElement('div');
+        el.className = 'pl-chip';
+        el.draggable = true;
+
+        let iconHtml = '', nameHtml = '', badgeHtml = '';
+
+        if (item.type === 'team') {
+            const colon = (item.key || '').lastIndexOf(':');
+            const path = colon > -1 ? item.key.slice(0, colon) : '';
+            const abbr = colon > -1 ? item.key.slice(colon + 1) : item.key;
+            const sport = path.split('/')[0] || '';
+            const league = path.split('/')[1] || '';
+            const meta = teamMeta[item.key] || {};
+            const color = meta.color ? `#${meta.color.replace('#','')}` : '#555';
+            iconHtml = meta.logo
+                ? `<img src="${meta.logo}" style="width:28px;height:28px;object-fit:contain;" onerror="this.style.display='none'">`
+                : `<span style="font-size:18px;">${_sportIcon(path)}</span>`;
+            nameHtml = `<span class="pl-chip-name" style="color:${color};">${abbr}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">${(league || sport).toUpperCase()}</span>`;
+        } else if (item.type === 'driver') {
+            const series = (item.series || '').split('/')[1] || 'RACING';
+            iconHtml = `<span style="font-size:18px;">🏎️</span>`;
+            nameHtml = `<span class="pl-chip-name">${item.car ? '#'+item.car+' ' : ''}${item.name}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">${series.toUpperCase()}</span>`;
+        } else if (item.type === 'golfer') {
+            iconHtml = `<span style="font-size:18px;">⛳</span>`;
+            nameHtml = `<span class="pl-chip-name">${item.name}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">PGA</span>`;
+        } else if (item.type === 'special') {
+            const sp = specials.find(s => s.uid === item.uid);
+            const t = sp ? sp.type || 'text' : 'text';
+            const title = sp ? (sp.title || sp.url_label || sp.url || '(no title)') : '(deleted)';
+            const icons2 = {text: '📝', image: '🖼', url: '🔗'};
+            iconHtml = `<span style="font-size:18px;">${icons2[t] || '📝'}</span>`;
+            nameHtml = `<span class="pl-chip-name">${title}</span>`;
+            badgeHtml = `<span class="pl-chip-badge">${t.toUpperCase()}</span>`;
+        } else if (item.type === 'logo') {
+            iconHtml = `<span style="font-size:18px;">🖼️</span>`;
+            nameHtml = `<span class="pl-chip-name">Logo Slide</span>`;
+            badgeHtml = `<span class="pl-chip-badge">LOGO</span>`;
+        } else if (item.type === 'local') {
+            iconHtml = `<span style="font-size:18px;">📅</span>`;
+            nameHtml = `<span class="pl-chip-name">Local Schedule &amp; RSS</span>`;
+            badgeHtml = `<span class="pl-chip-badge">LOCAL</span>`;
+        }
+
+        el.innerHTML = `
+            <div class="pl-chip-seq">
+                <span class="pl-chip-num">${idx + 1}</span>
+                <span class="drag-grip">⠿</span>
+            </div>
+            <span style="flex-shrink:0;font-size:13px;">${iconHtml}</span>
+            <div style="min-width:0;flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px;">
+                ${nameHtml}
+                ${badgeHtml}
+            </div>`;
+
+        el.addEventListener('dragstart', e => {
+            _plDragSrc = idx;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => el.style.opacity = '0.35', 0);
+        });
+        el.addEventListener('dragend', () => { el.style.opacity = '1'; _plDragSrc = null; });
+        el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+        el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+        el.addEventListener('drop', e => {
+            e.preventDefault(); el.classList.remove('drag-over');
+            if (_plDragSrc === null || _plDragSrc === idx) return;
+            const [moved] = slidePlaylist.splice(_plDragSrc, 1);
+            slidePlaylist.splice(idx, 0, moved);
+            renderPlaylist();
+        });
+        return el;
+    }
+
+    function renderPlaylist() {
+        const container = document.getElementById('playlist-chips');
+        if (!container) return;
+        container.innerHTML = '';
+        slidePlaylist.forEach((item, idx) => {
+            container.appendChild(buildPlaylistChip(item, idx));
+        });
+    }
+
+    function syncPlaylist() {
+        // Build the canonical set of items that should be in the playlist
+        const wantedKeys = new Set();
+
+        // Logo (always first if present)
+        const logoEntry = { type: 'logo', key: 'logo' };
+
+        // Teams
+        const teamEntries = selectedTeams.map(key => ({ type: 'team', key }));
+        teamEntries.forEach(e => wantedKeys.add(e.key));
+
+        // Drivers
+        const driverEntries = [];
+        selectedNascarFavorites.forEach(name => {
+            const key = `racing/nascar-cup:${name}`;
+            driverEntries.push({ type: 'driver', key, series: 'racing/nascar-cup', name });
+            wantedKeys.add(key);
+        });
+        selectedIndycarFavorites.forEach(name => {
+            const key = `racing/irl:${name}`;
+            driverEntries.push({ type: 'driver', key, series: 'racing/irl', name });
+            wantedKeys.add(key);
+        });
+        selectedF1Favorites.forEach(name => {
+            const key = `racing/f1:${name}`;
+            driverEntries.push({ type: 'driver', key, series: 'racing/f1', name });
+            wantedKeys.add(key);
+        });
+
+        // Golfers
+        const golferEntries = selectedGolfFavorites.map(name => ({
+            type: 'golfer', key: `golf/pga:${name}`, name
+        }));
+        golferEntries.forEach(e => wantedKeys.add(e.key));
+
+        // Specials (each gets a uid, ensure they have one)
+        specials.forEach((sp, i) => {
+            if (!sp.uid) sp.uid = `sp-${Date.now()}-${i}`;
+        });
+        const specialEntries = specials.map(sp => ({ type: 'special', key: `sp:${sp.uid}`, uid: sp.uid }));
+        specialEntries.forEach(e => wantedKeys.add(e.key));
+
+        // Local (always last if present)
+        const localEntry = { type: 'local', key: 'local' };
+
+        // Now merge: keep existing playlist order for items still valid, add new ones
+        const allNewEntries = [...teamEntries, ...driverEntries, ...golferEntries, ...specialEntries];
+        const newKeyMap = {};
+        allNewEntries.forEach(e => { newKeyMap[e.key] = e; });
+
+        // Filter existing playlist to only keep valid items
+        const kept = slidePlaylist.filter(item => {
+            if (item.type === 'logo' || item.type === 'local') return true;
+            return wantedKeys.has(item.key);
+        });
+
+        // Add any new items not already in playlist
+        const keptKeys = new Set(kept.map(i => i.key || i.type));
+        allNewEntries.forEach(entry => {
+            if (!keptKeys.has(entry.key)) kept.push(entry);
+        });
+
+        // Ensure logo is present (at position 0 if not already there)
+        if (!kept.some(i => i.type === 'logo')) kept.unshift(logoEntry);
+        // Ensure local is present (at end if not already there)
+        if (!kept.some(i => i.type === 'local')) kept.push(localEntry);
+
+        // Refresh any driver entries with current name data (in case items were added without car info)
+        slidePlaylist = kept.map(item => {
+            if (item.type === 'driver' && newKeyMap[item.key]) {
+                return { ...newKeyMap[item.key] };
+            }
+            return item;
+        });
+
+        renderPlaylist();
+    }
+
+
+    // ── Event Windows (per-league) ──
+
+    function renderEventWindows() {
+        const grid = document.getElementById('event-windows-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        const leagues = [...document.querySelectorAll('.league-check.selected')].map(el => el.dataset.val);
+        if (!leagues.length) {
+            grid.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:14px;">No active leagues selected.</p>';
+            return;
+        }
+        leagues.forEach(path => {
+            const dw = savedDateWindows[path] || {};
+            const isRacing = path.startsWith('racing/');
+            const defAhead = isRacing ? 2 : 7;
+            const back  = dw.days_back  ?? 1;
+            const ahead = dw.days_ahead ?? defAhead;
+
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:7px;flex-wrap:nowrap;';
+            row.innerHTML = `
+                <span style="font-size:13px;font-weight:700;letter-spacing:0.5px;color:#ccc;width:72px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${LEAGUE_LABELS[path] || path}</span>
+                <label style="margin:0;font-size:12px;color:#555;font-family:'Barlow',sans-serif;flex-shrink:0;">Past</label>
+                <input type="number" min="0" max="30" step="1" value="${back}"
+                       style="width:44px;padding:4px 6px;background:#000;border:1px solid #2a2a2a;color:white;border-radius:6px;font-size:14px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;flex-shrink:0;"
+                       data-league="${path}" data-field="days_back">
+                <label style="margin:0;font-size:12px;color:#555;font-family:'Barlow',sans-serif;flex-shrink:0;">/ Ahead</label>
+                <input type="number" min="0" max="30" step="1" value="${ahead}"
+                       style="width:44px;padding:4px 6px;background:#000;border:1px solid #2a2a2a;color:white;border-radius:6px;font-size:14px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;flex-shrink:0;"
+                       data-league="${path}" data-field="days_ahead">
+                <label style="margin:0;font-size:12px;color:#555;font-family:'Barlow',sans-serif;flex-shrink:0;">days</label>`;
+            row.querySelectorAll('input').forEach(inp => {
+                inp.addEventListener('change', () => {
+                    const lg = inp.dataset.league;
+                    if (!savedDateWindows[lg]) savedDateWindows[lg] = {};
+                    savedDateWindows[lg][inp.dataset.field] = parseInt(inp.value) || 0;
+                });
+            });
+            grid.appendChild(row);
+        });
+    }
+
+
+    // ── Accent color ──
+
+    function applyAccent(hex) {
+        document.documentElement.style.setProperty('--accent', hex);
+        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        const dr = Math.round(r*0.75), dg = Math.round(g*0.75), db = Math.round(b*0.75);
+        const dark = '#' + [dr,dg,db].map(v => v.toString(16).padStart(2,'0')).join('');
+        document.documentElement.style.setProperty('--accent-dark', dark);
+        document.documentElement.style.setProperty('--accent-bg', `rgba(${r},${g},${b},0.12)`);
+    }
+
+    document.getElementById('header_color').addEventListener('input', e => applyAccent(e.target.value));
+
+
+    // ── Mode ──
+
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+        document.querySelectorAll('.server-only').forEach(el => el.style.display = mode === 'server' ? '' : 'none');
+        document.querySelectorAll('.kiosk-only').forEach(el => el.style.display = mode === 'kiosk' ? '' : 'none');
+
+        const note = document.getElementById('leagues-note');
+        if (note) {
+            note.textContent = mode === 'kiosk'
+                ? 'These leagues are specific to this kiosk — other displays can show different sports.'
+                : 'Select which leagues appear in the ticker and score cards.';
+        }
+    }
+
+
+    // ── Slide transition ──
+
+    function setTransition(val) {
+        document.querySelectorAll('.trans-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+    }
+
+    // ── Orient / Theme toggles ──
+
+    document.querySelectorAll('.orient-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.orient-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.body.classList.toggle('light', btn.dataset.val === 'light');
+        });
+    });
+
+    document.querySelectorAll('.font-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.font-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+
+    // ── League toggles ──
+
+    document.querySelectorAll('.league-check').forEach(el => {
+        el.addEventListener('click', () => {
+            el.classList.toggle('selected');
+            refreshConfSection();
+            syncPlaylist();
+            renderEventWindows();
+        });
+    });
+
+    function refreshConfSection() {
+        const selected = [...document.querySelectorAll('.league-check.selected')]
+            .map(el => el.dataset.val).filter(v => COLLEGE_LEAGUES.has(v));
+        const grid = document.getElementById('conf-grid');
+        const emptyEl = document.getElementById('conf-empty-msg');
+        if (!selected.length) {
+            grid.querySelectorAll('.conf-row').forEach(r => r.remove());
+            if (emptyEl) emptyEl.style.display = 'block';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+        const existing = new Set([...grid.querySelectorAll('.conf-row')].map(r => r.dataset.league));
+        grid.querySelectorAll('.conf-row').forEach(r => { if (!selected.includes(r.dataset.league)) r.remove(); });
+        selected.forEach(path => {
+            if (existing.has(path)) return;
+            const row = document.createElement('div');
+            row.className = 'conf-row';
+            row.dataset.league = path;
+            row.innerHTML = `
+                <span class="conf-row-label">${LEAGUE_LABELS[path]} — <span style="color:#555;font-weight:400;font-size:13px;letter-spacing:0">click to toggle; blank = all games</span></span>
+                <div class="conf-chips" data-league="${path}"><span style="color:#444;font-family:Barlow,sans-serif;font-size:14px;">Loading…</span></div>`;
+            grid.appendChild(row);
+            loadConferences(path, row.querySelector('.conf-chips'));
+        });
+    }
+
+    async function loadConferences(leaguePath, chipsEl) {
+        try {
+            const res = await fetch(`/api/conferences/${leaguePath}`);
+            const confs = await res.json();
+            const saved = selectedConferences[leaguePath] || [];
+            const savedSet = new Set(Array.isArray(saved) ? saved : [saved].filter(Boolean));
+            chipsEl.innerHTML = '';
+            confs.forEach(c => {
+                const chip = document.createElement('div');
+                chip.className = 'conf-chip' + (savedSet.has(c.id) ? ' selected' : '');
+                chip.dataset.id = c.id;
+                chip.textContent = c.name;
+                chip.addEventListener('click', () => chip.classList.toggle('selected'));
+                chipsEl.appendChild(chip);
+            });
+        } catch(e) {
+            chipsEl.innerHTML = '<span style="color:#555;font-family:Barlow,sans-serif;font-size:14px;">Unavailable</span>';
+        }
+    }
+
+
+    // ── Server: pairing code ──
+
+    async function generatePairingCode() {
+        try {
+            const res = await fetch('/api/pairing/code');
+            const data = await res.json();
+            document.getElementById('pairing-code-value').textContent = data.code;
+            document.getElementById('pairing-code-expires').textContent = 'Expires in 10 minutes · One-time use only';
+            document.getElementById('pairing-code-display').style.display = 'block';
+
+            // Countdown timer
+            let remaining = data.expires_in;
+            if (pairingCodeTimer) clearInterval(pairingCodeTimer);
+            const timerEl = document.getElementById('pairing-code-timer');
+            pairingCodeTimer = setInterval(() => {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    clearInterval(pairingCodeTimer);
+                    document.getElementById('pairing-code-display').style.display = 'none';
+                    timerEl.textContent = '';
+                } else {
+                    const m = Math.floor(remaining / 60);
+                    const s = remaining % 60;
+                    timerEl.textContent = `Expires in ${m}:${String(s).padStart(2,'0')}`;
+                }
+            }, 1000);
+        } catch(e) {
+            alert('Failed to generate code.');
+        }
+    }
+
+
+    // ── Server: kiosks list ──
+
+    async function loadKiosks() {
+        const el = document.getElementById('kiosks-list');
+        try {
+            const res = await fetch('/api/kiosks');
+            const kiosks = await res.json();
+            if (!kiosks.length) {
+                el.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:14px;">No kiosks connected yet.</p>';
+                return;
+            }
+            el.innerHTML = kiosks.map(k => `
+                <div class="kiosk-row${k.online ? ' online' : ''}">
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${k.online ? '#00E676' : '#444'};flex-shrink:0;"></span>
+                    <div style="flex:1;">
+                        <span style="font-size:16px;font-weight:700;letter-spacing:1px;">${k.name}</span>
+                        <span style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-left:10px;">${k.ip || ''}</span>
+                        ${k.online ? '<span style="color:#00E676;font-size:12px;font-family:\'Barlow\',sans-serif;margin-left:8px;">ONLINE</span>' : ''}
+                    </div>
+                    <button class="btn" onclick="unpairKiosk('${k.id}')" style="background:none;color:#444;border:1px solid #333;font-size:13px;padding:5px 12px;">REMOVE</button>
+                </div>
+            `).join('');
+        } catch(e) {
+            el.innerHTML = '<p style="color:#555;font-family:\'Barlow\',sans-serif;font-size:14px;">Failed to load.</p>';
+        }
+    }
+
+    async function unpairKiosk(id) {
+        if (!confirm('Remove this kiosk from the server?')) return;
+        await fetch(`/api/kiosks/${id}`, { method: 'DELETE' });
+        loadKiosks();
+    }
+
+
+    // ── Server: cache status ──
+
+    async function refreshCacheStatus() {
+        const el = document.getElementById('cache-status-text');
+        try {
+            const res = await fetch('/api/cache/status');
+            const data = await res.json();
+            if (data.updated_at) {
+                const dt = new Date(data.updated_at);
+                el.textContent = `Last updated: ${dt.toLocaleTimeString()} · ${data.leagues_cached.length} league(s) cached`;
+                el.style.color = '#00E676';
+            } else {
+                el.textContent = 'Cache not yet populated — scores will load on first request.';
+                el.style.color = '#FFD600';
+            }
+        } catch(e) {
+            el.textContent = 'Could not check cache status.';
+            el.style.color = '#FF1744';
+        }
+    }
+
+    async function forceRefreshCache() {
+        const btn = document.getElementById('force-refresh-btn');
+        const el = document.getElementById('cache-status-text');
+        btn.disabled = true;
+        btn.textContent = 'REFRESHING...';
+        el.textContent = 'Fetching latest scores...';
+        el.style.color = '#FFD600';
+        try {
+            await fetch('/api/cache/refresh', { method: 'POST' });
+            await new Promise(r => setTimeout(r, 3000));
+            await refreshCacheStatus();
+        } catch(e) {
+            el.textContent = 'Refresh failed.';
+            el.style.color = '#FF1744';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'FORCE REFRESH';
+        }
+    }
+
+
+    // ── Kiosk: connect / disconnect ──
+
+    async function connectKiosk() {
+        const serverUrl = document.getElementById('server_url_input').value.trim();
+        const code = document.getElementById('pairing_code_input').value.trim().toUpperCase();
+        const name = document.getElementById('kiosk_name_input').value.trim();
+        const msgEl = document.getElementById('kiosk-connect-msg');
+        if (!serverUrl || !code) {
+            msgEl.textContent = 'Server URL and pairing code are required.';
+            msgEl.style.color = '#FF1744';
+            return;
+        }
+        msgEl.textContent = 'Connecting…';
+        msgEl.style.color = '#888';
+        try {
+            const res = await fetch('/api/pairing/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ server_url: serverUrl, code, kiosk_name: name || 'Kiosk' }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                msgEl.style.color = '#00E676';
+                msgEl.textContent = `Connected to: ${data.server_name || serverUrl}`;
+                checkKioskStatus();
+            } else {
+                msgEl.style.color = '#FF1744';
+                msgEl.textContent = `Error: ${data.error}`;
+            }
+        } catch(e) {
+            msgEl.style.color = '#FF1744';
+            msgEl.textContent = 'Connection failed — check the server URL.';
+        }
+    }
+
+    async function disconnectKiosk() {
+        await fetch('/api/pairing/disconnect', { method: 'POST' });
+        checkKioskStatus();
+    }
+
+    async function checkKioskStatus() {
+        try {
+            const res = await fetch('/api/pairing/status');
+            const data = await res.json();
+            const dot  = document.getElementById('kiosk-conn-dot');
+            const txt  = document.getElementById('kiosk-conn-text');
+            const name = document.getElementById('kiosk-server-name');
+            const disc = document.getElementById('kiosk-disconnect-btn');
+            const form = document.getElementById('kiosk-connect-form');
+
+            if (data.paired && data.server_reachable) {
+                dot.style.background  = '#00E676';
+                txt.style.color       = '#00E676';
+                txt.textContent       = 'CONNECTED';
+                name.textContent      = `Server: ${data.server_name || data.server_url}`;
+                disc.style.display    = '';
+                form.style.display    = 'none';
+            } else if (data.server_url) {
+                dot.style.background  = '#FFD600';
+                txt.style.color       = '#FFD600';
+                txt.textContent       = 'UNREACHABLE';
+                name.textContent      = data.server_url;
+                disc.style.display    = '';
+                form.style.display    = 'none';
+            } else {
+                dot.style.background  = '#444';
+                txt.style.color       = '#555';
+                txt.textContent       = 'NOT CONNECTED';
+                name.textContent      = '';
+                disc.style.display    = 'none';
+                form.style.display    = '';
+            }
+
+            if (data.server_url) document.getElementById('server_url_input').value = data.server_url;
+            if (data.kiosk_name) document.getElementById('kiosk_name_input').value  = data.kiosk_name;
+        } catch(e) {}
+    }
+
+
+    // ── Specials ──
+
+    let specials = [];
+    let specialDragSrc = null;
+    const DOW_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    function renderSpecials() {
+        const list = document.getElementById('specials-list');
+        list.innerHTML = '';
+        specials.forEach((sp, idx) => {
+            const sptype = sp.type || 'text';
+            const smode  = sp.schedule_type || 'always';
+            const sdays  = sp.schedule_days || [];
+            const dowChips = DOW_LABELS.map((d, i) =>
+                `<span class="sp-chip${sdays.includes(i) ? ' active' : ''}" data-val="${i}">${d}</span>`
+            ).join('');
+            const domChips = Array.from({length: 31}, (_, i) => i + 1).map(d =>
+                `<span class="sp-chip${sdays.includes(d) ? ' active' : ''}" data-val="${d}">${d}</span>`
+            ).join('');
+            const imgPreview = sp.image
+                ? `<img src="${sp.image}" class="sp-img-preview">`
+                : `<div class="sp-img-placeholder">No image</div>`;
+
+            const item = document.createElement('div');
+            item.className = 'special-item';
+            item.draggable = true;
+            item.dataset.idx = idx;
+            item.innerHTML = `
+                <div class="special-item-top">
+                    <span class="drag-grip" title="Drag to reorder">⠿</span>
+                    <input type="checkbox" ${sp.enabled ? 'checked' : ''} title="Enable this slide">
+                    <span style="font-size:14px;color:#555;font-family:'Barlow',sans-serif;flex:1">Enabled</span>
+                    <button class="special-del" title="Delete">✕</button>
+                </div>
+                <div class="sp-row">
+                    <span class="sp-row-label">TYPE</span>
+                    <button class="sp-toggle-btn${sptype==='text'?' active':''}" data-sptype="text">TEXT</button>
+                    <button class="sp-toggle-btn${sptype==='image'?' active':''}" data-sptype="image">IMAGE</button>
+                    <button class="sp-toggle-btn${sptype==='url'?' active':''}" data-sptype="url">LINK / URL</button>
+                </div>
+                <div class="sp-text-fields" style="display:${sptype==='text'?'block':'none'}">
+                    <div class="special-item-fields">
+                        <input type="text" placeholder="Headline (e.g. HAPPY HOUR)" value="${sp.title||''}" data-field="title">
+                        <input type="text" placeholder="Body text (optional)" value="${sp.body||''}" data-field="body">
+                        <input type="color" value="${sp.color||'#F5A800'}" data-field="color" title="Accent color">
+                    </div>
+                </div>
+                <div class="sp-image-fields" style="display:${sptype==='image'?'block':'none'}">
+                    <div class="sp-img-row">
+                        ${imgPreview}
+                        <button class="sp-img-btn" type="button">${sp.image?'CHANGE IMAGE':'UPLOAD IMAGE'}</button>
+                        <input type="file" accept="image/*" style="display:none" class="sp-img-input">
+                    </div>
+                </div>
+                <div class="sp-url-fields" style="display:${sptype==='url'?'block':'none'}">
+                    <div class="special-item-fields" style="grid-template-columns:1fr 1fr;">
+                        <input type="text" placeholder="Label (e.g. Dashboard)" value="${sp.url_label||''}" data-field="url_label">
+                        <input type="url" placeholder="https://..." value="${sp.url||''}" data-field="url">
+                    </div>
+                    <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:6px;">Displayed as a fullscreen embedded page. Works best with local network URLs.</p>
+                </div>
+                <hr class="sp-divider">
+                <div class="sp-row">
+                    <span class="sp-row-label">SHOW</span>
+                    <button class="sp-toggle-btn sp-mode-btn${smode==='always'?' active':''}" data-smode="always">ALWAYS</button>
+                    <button class="sp-toggle-btn sp-mode-btn${smode==='dow'?' active':''}" data-smode="dow">DAY OF WEEK</button>
+                    <button class="sp-toggle-btn sp-mode-btn${smode==='dom'?' active':''}" data-smode="dom">DAY OF MONTH</button>
+                </div>
+                <div class="sp-chips sp-days-dow" style="display:${smode==='dow'?'flex':'none'}">${dowChips}</div>
+                <div class="sp-chips sp-days-dom" style="display:${smode==='dom'?'flex':'none'}">${domChips}</div>`;
+
+            item.querySelector('input[type=checkbox]').addEventListener('change', e => { specials[idx].enabled = e.target.checked; });
+            item.querySelector('.special-del').addEventListener('click', () => { specials.splice(idx,1); renderSpecials(); syncPlaylist(); });
+            item.querySelectorAll('[data-sptype]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    item.querySelectorAll('[data-sptype]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    specials[idx].type = btn.dataset.sptype;
+                    item.querySelector('.sp-text-fields').style.display  = btn.dataset.sptype==='text'?'block':'none';
+                    item.querySelector('.sp-image-fields').style.display = btn.dataset.sptype==='image'?'block':'none';
+                    item.querySelector('.sp-url-fields').style.display   = btn.dataset.sptype==='url'?'block':'none';
+                    syncPlaylist();
+                });
+            });
+            item.querySelector('[data-field=title]').addEventListener('input', e => { specials[idx].title = e.target.value; });
+            item.querySelector('[data-field=body]').addEventListener('input',  e => { specials[idx].body  = e.target.value; });
+            item.querySelector('[data-field=color]').addEventListener('input', e => {
+                specials[idx].color = e.target.value;
+                item.style.borderColor = e.target.value;
+            });
+            item.querySelector('[data-field=url]')?.addEventListener('input', e => { specials[idx].url = e.target.value; syncPlaylist(); });
+            item.querySelector('[data-field=url_label]')?.addEventListener('input', e => { specials[idx].url_label = e.target.value; syncPlaylist(); });
+            const imgBtn   = item.querySelector('.sp-img-btn');
+            const imgInput = item.querySelector('.sp-img-input');
+            imgBtn.addEventListener('click', () => imgInput.click());
+            imgInput.addEventListener('change', async () => {
+                const file = imgInput.files[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append('image', file);
+                imgBtn.textContent = 'UPLOADING…';
+                try {
+                    const res  = await fetch('/api/upload_special_image', { method:'POST', body:fd });
+                    const data = await res.json();
+                    if (data.url) {
+                        specials[idx].image = data.url;
+                        const wrap = item.querySelector('.sp-img-row');
+                        const old  = wrap.firstElementChild;
+                        const img  = document.createElement('img');
+                        img.src = data.url; img.className = 'sp-img-preview';
+                        old.replaceWith(img);
+                        imgBtn.textContent = 'CHANGE IMAGE';
+                    } else { imgBtn.textContent = 'UPLOAD FAILED'; }
+                } catch(e) { imgBtn.textContent = 'UPLOAD FAILED'; }
+            });
+            item.querySelectorAll('.sp-mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    item.querySelectorAll('.sp-mode-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const mode = btn.dataset.smode;
+                    specials[idx].schedule_type = mode;
+                    item.querySelector('.sp-days-dow').style.display = mode==='dow'?'flex':'none';
+                    item.querySelector('.sp-days-dom').style.display = mode==='dom'?'flex':'none';
+                    if (mode==='always') specials[idx].schedule_days = [];
+                });
+            });
+            item.querySelectorAll('.sp-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    chip.classList.toggle('active');
+                    const val = parseInt(chip.dataset.val);
+                    let days = specials[idx].schedule_days || [];
+                    specials[idx].schedule_days = chip.classList.contains('active')
+                        ? [...new Set([...days, val])]
+                        : days.filter(d => d !== val);
+                });
+            });
+            item.addEventListener('dragstart', e => {
+                specialDragSrc = idx;
+                e.dataTransfer.effectAllowed = 'move';
+                setTimeout(() => item.style.opacity = '0.35', 0);
+            });
+            item.addEventListener('dragend',  () => { item.style.opacity = '1'; specialDragSrc = null; });
+            item.addEventListener('dragover',  e => { e.preventDefault(); item.classList.add('drag-over'); });
+            item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+            item.addEventListener('drop', e => {
+                e.preventDefault(); item.classList.remove('drag-over');
+                if (specialDragSrc===null || specialDragSrc===idx) return;
+                const [moved] = specials.splice(specialDragSrc, 1);
+                specials.splice(idx, 0, moved);
+                renderSpecials();
+            });
+            item.style.borderColor = sp.color || '#222';
+            list.appendChild(item);
+        });
+    }
+
+    function addSpecial() {
+        specials.push({ uid:`sp-${Date.now()}`, enabled:true, type:'text', title:'', body:'', color:'#F5A800', image:'', url:'', url_label:'', schedule_type:'always', schedule_days:[] });
+        renderSpecials();
+        syncPlaylist();
+        const items = document.querySelectorAll('.special-item');
+        const last  = items[items.length-1];
+        if (last) last.querySelector('[data-field=title]').focus();
+    }
+
+
+    // ── RSS Feeds ──
+
+    let rssFeeds = [];
+
+    function renderRssFeeds() {
+        const list = document.getElementById('rss-feeds-list');
+        list.innerHTML = '';
+        if (!rssFeeds.length) {
+            list.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:15px;margin-bottom:8px;">No RSS feeds configured. Click + ADD RSS FEED to get started.</p>';
+            return;
+        }
+        rssFeeds.forEach((feed, idx) => {
+            const enabled = feed.enabled !== false;
+            const el = document.createElement('div');
+            el.style.cssText = `background:#0a0a0a;border:1px solid ${enabled ? '#333' : '#1a1a1a'};border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;opacity:${enabled ? '1' : '0.5'};transition:opacity 0.2s,border-color 0.2s;`;
+            el.innerHTML = `
+                <!-- Header row: logo + tag badge + label + enable toggle + delete -->
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <div class="rss-logo-preview-wrap" style="flex-shrink:0;">
+                        ${feed.logo
+                            ? `<img src="${feed.logo}" style="height:44px;max-width:80px;object-fit:contain;border-radius:6px;border:1px solid #2a2a2a;background:#000;">`
+                            : `<div style="width:56px;height:44px;border:1px dashed #333;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#2a2a2a;font-size:10px;font-family:'Barlow',sans-serif;text-align:center;line-height:1.2;">NO<br>LOGO</div>`}
+                    </div>
+                    <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
+                        <span class="rss-cat-badge" style="background:#0a1a2a;border:1px solid #099afc;color:#099afc;font-size:11px;font-weight:700;letter-spacing:2px;padding:3px 8px;border-radius:4px;white-space:nowrap;display:${feed.category ? 'inline' : 'none'};">${feed.category || ''}</span>
+                        <span class="rss-header-label" style="font-size:20px;font-weight:900;color:${enabled ? 'white' : '#555'};letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${feed.label || '<em style="color:#333;font-style:normal;font-size:14px;font-weight:400;">no label</em>'}</span>
+                    </div>
+                    <button class="rss-toggle-btn" style="flex-shrink:0;padding:8px 18px;border-radius:20px;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;border:2px solid ${enabled ? '#00E676' : '#333'};background:${enabled ? '#001a07' : '#0a0a0a'};color:${enabled ? '#00E676' : '#555'};transition:0.15s;">${enabled ? 'ENABLED' : 'DISABLED'}</button>
+                    <button class="rss-del-btn" style="flex-shrink:0;background:none;border:1px solid #333;color:#555;border-radius:8px;padding:9px 14px;cursor:pointer;font-size:18px;transition:0.15s;" title="Remove">✕</button>
+                </div>
+                <!-- Edit fields row -->
+                <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:200px;">
+                        <label style="display:block;font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-bottom:4px;">RSS FEED URL</label>
+                        <input type="url" class="rss-url-input" value="${feed.url || ''}" placeholder="Paste any school calendar or RSS feed URL"
+                            style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:16px;font-family:'Barlow',sans-serif;outline:none;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                            <button class="rss-detect-btn sp-img-btn" style="font-size:13px;padding:6px 14px;">DETECT FEED</button>
+                            <span class="rss-detect-status" style="font-size:13px;font-family:'Barlow',sans-serif;color:#555;"></span>
+                        </div>
+                    </div>
+                    <div style="width:130px;">
+                        <label style="display:block;font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-bottom:4px;">LABEL</label>
+                        <input type="text" class="rss-label-input" value="${feed.label || ''}" placeholder="AUBURN" maxlength="20"
+                            style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:16px;font-family:'Barlow',sans-serif;outline:none;">
+                    </div>
+                    <div style="width:150px;">
+                        <label style="display:block;font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-bottom:4px;">CATEGORY TAG</label>
+                        <select class="rss-cat-select"
+                            style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:15px;font-family:'Barlow',sans-serif;outline:none;">
+                            <option value="">— Type —</option>
+                            <option value="HIGH SCHOOL" ${feed.category === 'HIGH SCHOOL' ? 'selected' : ''}>High School</option>
+                            <option value="COLLEGE" ${feed.category === 'COLLEGE' ? 'selected' : ''}>College</option>
+                            <option value="LOCAL" ${feed.category === 'LOCAL' ? 'selected' : ''}>Local</option>
+                            <option value="SEMI PRO" ${feed.category === 'SEMI PRO' ? 'selected' : ''}>Semi Pro</option>
+                            <option value="CUSTOM" ${feed.category === 'CUSTOM' ? 'selected' : ''}>Custom</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Logo upload row -->
+                <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                    <div>
+                        <label style="display:block;font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-bottom:4px;">SCHOOL / TEAM LOGO</label>
+                        <button class="rss-logo-btn sp-img-btn">${feed.logo ? 'CHANGE LOGO' : 'UPLOAD LOGO'}</button>
+                        <input type="file" accept="image/*" style="display:none" class="rss-logo-file">
+                    </div>
+                </div>`;
+
+            el.querySelector('.rss-url-input').addEventListener('input', e => { rssFeeds[idx].url = e.target.value; });
+            el.querySelector('.rss-label-input').addEventListener('input', e => {
+                rssFeeds[idx].label = e.target.value;
+                el.querySelector('.rss-header-label').innerHTML = e.target.value || '<em style="color:#333;font-style:normal;font-size:14px;font-weight:400;">no label</em>';
+            });
+            el.querySelector('.rss-cat-select').addEventListener('change', e => {
+                rssFeeds[idx].category = e.target.value;
+                const badge = el.querySelector('.rss-cat-badge');
+                badge.textContent = e.target.value;
+                badge.style.display = e.target.value ? 'inline' : 'none';
+            });
+            el.querySelector('.rss-del-btn').addEventListener('click', () => { rssFeeds.splice(idx, 1); renderRssFeeds(); });
+            el.querySelector('.rss-del-btn').addEventListener('mouseover', e => { e.target.style.borderColor='#FF1744'; e.target.style.color='#FF1744'; });
+            el.querySelector('.rss-del-btn').addEventListener('mouseout',  e => { e.target.style.borderColor='#333'; e.target.style.color='#555'; });
+            el.querySelector('.rss-toggle-btn').addEventListener('click', () => {
+                const nowEnabled = rssFeeds[idx].enabled === false;
+                rssFeeds[idx].enabled = nowEnabled;
+                const btn = el.querySelector('.rss-toggle-btn');
+                btn.textContent = nowEnabled ? 'ENABLED' : 'DISABLED';
+                btn.style.borderColor = nowEnabled ? '#00E676' : '#333';
+                btn.style.background  = nowEnabled ? '#001a07' : '#0a0a0a';
+                btn.style.color       = nowEnabled ? '#00E676' : '#555';
+                el.style.opacity      = nowEnabled ? '1' : '0.5';
+                el.style.borderColor  = nowEnabled ? '#333' : '#1a1a1a';
+                el.querySelector('.rss-header-label').style.color = nowEnabled ? 'white' : '#555';
+            });
+
+            const detectBtn    = el.querySelector('.rss-detect-btn');
+            const detectStatus = el.querySelector('.rss-detect-status');
+            const urlInput     = el.querySelector('.rss-url-input');
+            detectBtn.addEventListener('click', async () => {
+                const url = urlInput.value.trim();
+                if (!url) { detectStatus.textContent = 'Enter a URL first.'; detectStatus.style.color = '#FF1744'; return; }
+                detectBtn.textContent = 'DETECTING…';
+                detectStatus.textContent = '';
+                try {
+                    const res  = await fetch('/api/resolve_feed', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url}) });
+                    const data = await res.json();
+                    if (data.ok) {
+                        rssFeeds[idx].url = data.resolved_url;
+                        urlInput.value = data.resolved_url;
+                        detectStatus.textContent = `✓ Detected: ${data.feed_type_label || data.feed_type}`;
+                        detectStatus.style.color = '#00E676';
+                    } else {
+                        detectStatus.textContent = data.error || 'Could not detect a feed at this URL.';
+                        detectStatus.style.color = '#FF1744';
+                    }
+                } catch(e) {
+                    detectStatus.textContent = 'Request failed.';
+                    detectStatus.style.color = '#FF1744';
+                }
+                detectBtn.textContent = 'DETECT FEED';
+            });
+
+            const logoBtn  = el.querySelector('.rss-logo-btn');
+            const logoFile = el.querySelector('.rss-logo-file');
+            logoBtn.addEventListener('click', () => logoFile.click());
+            logoFile.addEventListener('change', async () => {
+                const file = logoFile.files[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append('logo', file);
+                logoBtn.textContent = 'UPLOADING…';
+                try {
+                    const res  = await fetch('/api/upload_rss_logo', { method: 'POST', body: fd });
+                    const data = await res.json();
+                    if (data.url) {
+                        rssFeeds[idx].logo = data.url;
+                        const wrap = el.querySelector('.rss-logo-preview-wrap');
+                        wrap.innerHTML = `<img src="${data.url}" style="height:44px;max-width:80px;object-fit:contain;border-radius:6px;border:1px solid #2a2a2a;background:#000;">`;
+                        logoBtn.textContent = 'CHANGE LOGO';
+                    } else { logoBtn.textContent = 'UPLOAD FAILED'; }
+                } catch(e) { logoBtn.textContent = 'UPLOAD FAILED'; }
+            });
+            list.appendChild(el);
+        });
+    }
+
+    function addRssFeed() {
+        rssFeeds.push({ url: '', label: '', logo: '', category: '', enabled: true });
+        renderRssFeeds();
+        const inputs = document.querySelectorAll('.rss-url-input');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+    }
+
+
+    // ── Local Schedule ──
+
+    let scheduleItems = [];
+
+    function renderSchedule() {
+        const list = document.getElementById('schedule-list');
+        list.innerHTML = '';
+        scheduleItems.forEach((item, idx) => {
+            const el = document.createElement('div');
+            el.className = 'schedule-entry';
+            el.innerHTML = `
+                <input type="checkbox" title="Enabled" ${item.enabled !== false ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;">
+                <input type="text" placeholder="Label (HS FOOTBALL)" value="${item.label||''}" style="width:140px;" data-field="label">
+                <input type="text" placeholder="Away Team" value="${item.away_team||''}" style="width:120px;" data-field="away_team">
+                <span class="sch-at">@</span>
+                <input type="text" placeholder="Home Team" value="${item.home_team||''}" style="width:120px;" data-field="home_team">
+                <input type="text" placeholder="Date (Fri Oct 4)" value="${item.date||''}" style="width:110px;" data-field="date">
+                <input type="text" placeholder="Time (7:00 PM)" value="${item.time||''}" style="width:100px;" data-field="time">
+                <input type="text" placeholder="Location (opt.)" value="${item.location||''}" style="flex:1;min-width:100px;" data-field="location">
+                <button class="sch-del" title="Remove">✕</button>`;
+            el.querySelector('input[type=checkbox]').addEventListener('change', e => { scheduleItems[idx].enabled = e.target.checked; });
+            el.querySelectorAll('[data-field]').forEach(inp => {
+                inp.addEventListener('input', e => { scheduleItems[idx][inp.dataset.field] = e.target.value; });
+            });
+            el.querySelector('.sch-del').addEventListener('click', () => { scheduleItems.splice(idx, 1); renderSchedule(); });
+            list.appendChild(el);
+        });
+    }
+
+    function addScheduleEntry() {
+        scheduleItems.push({ enabled: true, label: '', away_team: '', home_team: '', date: '', time: '', location: '' });
+        renderSchedule();
+        const entries = document.querySelectorAll('.schedule-entry');
+        const last = entries[entries.length - 1];
+        if (last) last.querySelector('[data-field=label]').focus();
+    }
+
+
+    // ── Load settings ──
+
+    async function loadSettings() {
+        const res = await fetch('/api/settings');
+        currentSettings = await res.json();
+
+        const mode = currentSettings.device_mode || 'server';
+        setMode(mode);
+
+        document.getElementById('server_enable_display').checked = currentSettings.server_enable_display !== false;
+        document.getElementById('server_port').value   = currentSettings.port || 5000;
+        document.getElementById('display_name').value  = currentSettings.display_name || '';
+        const hc = currentSettings.header_color || '#F5A800';
+        document.getElementById('header_color').value  = hc;
+        applyAccent(hc);
+        document.getElementById('city').value          = currentSettings.city || '';
+
+        const colors = currentSettings.colors || {};
+        document.getElementById('color_live').value         = colors.live         || '#00E676';
+        document.getElementById('color_final').value        = colors.final        || '#FF1744';
+        document.getElementById('color_flash').value        = colors.flash        || '#FFD600';
+        document.getElementById('color_team_abbr').value    = colors.team_abbr    || '#ffffff';
+        document.getElementById('color_league_label').value = colors.league_label || '#099afc';
+        document.getElementById('color_ticker_base').value  = colors.ticker_base  || '#ffffff';
+        document.getElementById('color_winner').value       = colors.winner       || '#00E676';
+        document.getElementById('color_loser').value        = colors.loser        || '#FF1744';
+        document.getElementById('color_tie_score').value    = colors.tie_score    || '#FFD600';
+        document.getElementById('color_fav_abbr').value     = colors.fav_abbr     || '#F5A800';
+        document.getElementById('color_fav_score').value    = colors.fav_score    || '#F5A800';
+        document.getElementById('color_nascar_num').value   = colors.nascar_num   || '#FFD600';
+        document.getElementById('color_weather').value      = colors.weather      || '#dddddd';
+        document.getElementById('color_vs_color').value     = colors.vs_color     || '#ffffff';
+        document.getElementById('color_pre_time').value     = colors.pre_time     || '#ffffff';
+        document.getElementById('color_score_sep').value    = colors.score_sep    || '#888888';
+        document.getElementById('color_ticker_live').value  = colors.ticker_live  || '#00E676';
+        document.getElementById('color_ticker_final').value = colors.ticker_final || '#FF1744';
+        document.getElementById('color_ticker_sep').value   = colors.ticker_sep   || '#444444';
+        document.getElementById('color_race_pos').value     = colors.race_pos     || '#F5A800';
+        document.getElementById('color_race_laps').value    = colors.race_laps    || '#888888';
+        document.getElementById('color_card_subtext').value = colors.card_subtext || '#555555';
+        // Dark mode surfaces
+        document.getElementById('color_dark_bg').value         = colors.dark_bg         || '#080808';
+        document.getElementById('color_dark_card').value       = colors.dark_card       || '#111111';
+        document.getElementById('color_dark_border').value     = colors.dark_border     || '#2a2a2a';
+        document.getElementById('color_dark_vs').value         = colors.dark_vs         || '#ffffff';
+        document.getElementById('color_dark_ticker_bg').value  = colors.dark_ticker_bg  || '#000000';
+        // Light mode surfaces
+        document.getElementById('color_light_bg').value        = colors.light_bg        || '#c4d6f0';
+        document.getElementById('color_light_card').value      = colors.light_card      || '#ffffff';
+        document.getElementById('color_light_border').value    = colors.light_border    || '#ffffff';
+        document.getElementById('color_light_vs').value        = colors.light_vs        || '#445566';
+        // Font
+        const fontPrimary = currentSettings.font_primary || 'Barlow Condensed';
+        document.querySelectorAll('.font-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.font === fontPrimary));
+        document.getElementById('admin_username').value = currentSettings.admin_credentials?.username || 'admin';
+
+        const tzSel = document.getElementById('timezone');
+        [...tzSel.options].forEach(o => o.selected = (o.value === currentSettings.timezone));
+
+        const orient = currentSettings.cast_orientation || 'auto';
+        document.querySelectorAll('.orient-btn').forEach(b => b.classList.toggle('active', b.dataset.val === orient));
+
+        const theme = currentSettings.theme || 'dark';
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.val === theme));
+        document.body.classList.toggle('light', theme === 'light');
+
+        const savedLeagues = currentSettings.leagues || [];
+        document.querySelectorAll('.league-check').forEach(el => {
+            el.classList.toggle('selected', savedLeagues.includes(el.dataset.val));
+        });
+
+        selectedConferences = currentSettings.league_conferences || {};
+        refreshConfSection();
+
+        selectedTeams = [...(currentSettings.teams || [])];
+        const leaguesNeeded = new Set(selectedTeams.map(k => k.slice(0, k.lastIndexOf(':'))));
+        await Promise.all([...leaguesNeeded].map(l => fetchTeamMeta(l)));
+        updateFavList();
+
+        selectedNascarFavorites = [...(currentSettings.nascar_favorites || [])];
+        selectedIndycarFavorites = [...(currentSettings.indycar_favorites || [])];
+        selectedF1Favorites = [...(currentSettings.f1_favorites || [])];
+        updateNascarFavList();
+
+        selectedGolfFavorites = [...(currentSettings.golf_favorites || [])];
+        updateGolfFavList();
+
+        updateIndycarFavList();
+        updateF1FavList();
+        specials = currentSettings.specials || [];
+        renderSpecials();
+
+        slidePlaylist = currentSettings.slide_playlist || [];
+        // uid migration: ensure all specials have UIDs before syncPlaylist
+        specials.forEach((sp, i) => { if (!sp.uid) sp.uid = `sp-${Date.now()}-${i}`; });
+        document.getElementById('slide_duration').value = currentSettings.slide_duration || 8;
+        setTransition(currentSettings.slide_transition || 'slide-right');
+
+        savedDateWindows = currentSettings.date_windows || {};
+
+        syncPlaylist();
+        renderEventWindows();
+
+        const ls = currentSettings.local_schedule || {};
+        rssFeeds = ls.rss_feeds || [];
+        // Migrate legacy single feed into array
+        if (!rssFeeds.length && ls.rss_url) {
+            rssFeeds = [{ url: ls.rss_url, label: ls.rss_label || 'LOCAL', logo: '' }];
+        }
+        renderRssFeeds();
+        scheduleItems = ls.items || [];
+        renderSchedule();
+
+        const sched = currentSettings.schedule || {};
+        document.getElementById('shutdown-enabled').checked = sched.shutdown?.enabled || false;
+        document.getElementById('shutdown-time').value      = sched.shutdown?.time || '23:00';
+        document.getElementById('startup-enabled').checked  = sched.startup?.enabled || false;
+        document.getElementById('startup-time').value       = sched.startup?.time || '07:00';
+
+        const upd = currentSettings.update || {};
+        document.getElementById('update_source_url').value   = upd.source_url   || '';
+        document.getElementById('update_auto_check').checked = upd.auto_check   !== false;
+        document.getElementById('update_auto_apply').checked = upd.auto_apply   || false;
+        document.getElementById('update_check_hours').value  = upd.check_hours  || 6;
+
+        // Populate version display from the API (non-blocking)
+        fetch('/api/update/check').then(r => r.json()).then(_renderUpdateState).catch(() => {
+            document.getElementById('update-current-ver').textContent = upd.current || '—';
+        });
+
+        // Load mode-specific data
+        if (mode === 'server') {
+            loadKiosks();
+            refreshCacheStatus();
+        } else {
+            checkKioskStatus();
+        }
+    }
+
+
+    // ── Save settings ──
+
+    async function saveSettings() {
+        const leagues = [...document.querySelectorAll('.league-check.selected')].map(el => el.dataset.val);
+        const league_conferences = {};
+        document.querySelectorAll('#conf-grid .conf-chips').forEach(chips => {
+            const league = chips.dataset.league;
+            const ids = [...chips.querySelectorAll('.conf-chip.selected')].map(c => c.dataset.id);
+            if (ids.length) league_conferences[league] = ids;
+        });
+
+        const payload = {
+            device_mode: currentMode,
+            server_enable_display: document.getElementById('server_enable_display').checked,
+            port: parseInt(document.getElementById('server_port').value) || 5000,
+            display_name:   document.getElementById('display_name').value,
+            header_color:   document.getElementById('header_color').value,
+            colors: {
+                live:         document.getElementById('color_live').value,
+                final:        document.getElementById('color_final').value,
+                flash:        document.getElementById('color_flash').value,
+                team_abbr:    document.getElementById('color_team_abbr').value,
+                league_label: document.getElementById('color_league_label').value,
+                ticker_base:  document.getElementById('color_ticker_base').value,
+                winner:       document.getElementById('color_winner').value,
+                loser:        document.getElementById('color_loser').value,
+                tie_score:    document.getElementById('color_tie_score').value,
+                fav_abbr:     document.getElementById('color_fav_abbr').value,
+                fav_score:    document.getElementById('color_fav_score').value,
+                nascar_num:   document.getElementById('color_nascar_num').value,
+                weather:      document.getElementById('color_weather').value,
+                vs_color:     document.getElementById('color_vs_color').value,
+                pre_time:     document.getElementById('color_pre_time').value,
+                score_sep:    document.getElementById('color_score_sep').value,
+                ticker_live:  document.getElementById('color_ticker_live').value,
+                ticker_final: document.getElementById('color_ticker_final').value,
+                ticker_sep:   document.getElementById('color_ticker_sep').value,
+                race_pos:     document.getElementById('color_race_pos').value,
+                race_laps:    document.getElementById('color_race_laps').value,
+                card_subtext: document.getElementById('color_card_subtext').value,
+                dark_bg:          document.getElementById('color_dark_bg').value,
+                dark_card:        document.getElementById('color_dark_card').value,
+                dark_border:      document.getElementById('color_dark_border').value,
+                dark_vs:          document.getElementById('color_dark_vs').value,
+                dark_ticker_bg:   document.getElementById('color_dark_ticker_bg').value,
+                light_bg:         document.getElementById('color_light_bg').value,
+                light_card:       document.getElementById('color_light_card').value,
+                light_border:     document.getElementById('color_light_border').value,
+                light_vs:         document.getElementById('color_light_vs').value,
+            },
+            font_primary:   document.querySelector('.font-btn.active')?.dataset.font || 'Barlow Condensed',
+            city:           document.getElementById('city').value,
+            timezone:       document.getElementById('timezone').value,
+            cast_orientation: document.querySelector('.orient-btn.active')?.dataset.val || 'auto',
+            theme:          document.querySelector('.theme-btn.active')?.dataset.val || 'dark',
+            leagues,
+            teams:          selectedTeams,
+            nascar_favorites: selectedNascarFavorites,
+            indycar_favorites: selectedIndycarFavorites,
+            f1_favorites: selectedF1Favorites,
+            golf_favorites: selectedGolfFavorites,
+            slide_playlist: slidePlaylist,
+            slide_duration: parseInt(document.getElementById('slide_duration').value) || 8,
+            slide_transition: document.querySelector('.trans-btn.active')?.dataset.val || 'slide-right',
+            date_windows: (() => {
+                const date_windows = {};
+                document.querySelectorAll('#event-windows-grid input[data-league]').forEach(inp => {
+                    const lg = inp.dataset.league;
+                    if (!date_windows[lg]) date_windows[lg] = {};
+                    date_windows[lg][inp.dataset.field] = parseInt(inp.value) || 0;
+                });
+                return date_windows;
+            })(),
+            league_conferences,
+            admin_credentials: {
+                username: document.getElementById('admin_username').value || 'admin',
+                password: document.getElementById('admin_password').value || currentSettings.admin_credentials?.password || 'atsi'
+            },
+            specials,
+            local_schedule: {
+                rss_feeds: rssFeeds.filter(f => f.url.trim()),
+                items:     scheduleItems,
+            },
+            schedule: {
+                shutdown: { enabled: document.getElementById('shutdown-enabled').checked, time: document.getElementById('shutdown-time').value || '23:00' },
+                startup:  { enabled: document.getElementById('startup-enabled').checked,  time: document.getElementById('startup-time').value  || '07:00' }
+            },
+            update: {
+                source_url:  document.getElementById('update_source_url').value.trim(),
+                auto_check:  document.getElementById('update_auto_check').checked,
+                auto_apply:  document.getElementById('update_auto_apply').checked,
+                check_hours: parseInt(document.getElementById('update_check_hours').value) || 6,
+            },
+        };
+
+        // In kiosk mode, persist server_url + kiosk_name through the settings API
+        if (currentMode === 'kiosk') {
+            payload.server_url  = document.getElementById('server_url_input').value.trim();
+            payload.kiosk_name  = document.getElementById('kiosk_name_input').value.trim() || 'Kiosk';
+        }
+
+        try {
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            showToast('SAVED');
+        } catch(e) {
+            showToast('ERROR');
+        }
+    }
+
+
+    // ── Teams ──
+
+    async function fetchTeamMeta(leaguePath) {
+        try {
+            const res = await fetch(`/api/teams/${leaguePath}`);
+            const teams = await res.json();
+            teams.forEach(t => { teamMeta[`${leaguePath}:${t.abbr}`] = { logo:t.logo, color:t.color, name:t.name, abbr:t.abbr }; });
+        } catch(e) {}
+    }
+
+    async function loadTeams(leaguePath) {
+        if (!leaguePath) return;
+        const list = document.getElementById('team-list');
+        list.innerHTML = '<p style="color:#555;font-family:Barlow,sans-serif;">Loading...</p>';
+        try {
+            const res = await fetch(`/api/teams/${leaguePath}`);
+            const teams = await res.json();
+            if (!teams.length) {
+                list.innerHTML = '<p style="color:#555;font-family:Barlow,sans-serif;">No team data available.</p>';
+                return;
+            }
+            teams.forEach(t => { teamMeta[`${leaguePath}:${t.abbr}`] = { logo:t.logo, color:t.color, name:t.name, abbr:t.abbr }; });
+            list.innerHTML = '';
+            teams.sort((a,b) => a.name.localeCompare(b.name)).forEach(t => {
+                const key = `${leaguePath}:${t.abbr}`;
+                const div = document.createElement('div');
+                div.className = 'team-check' + (selectedTeams.includes(key) ? ' selected' : '');
+                div.dataset.key = key;
+                div.innerHTML = `<span>${t.abbr} — ${t.name}</span>`;
+                div.addEventListener('click', () => {
+                    if (selectedTeams.includes(key)) { selectedTeams = selectedTeams.filter(k => k !== key); div.classList.remove('selected'); }
+                    else { selectedTeams.push(key); div.classList.add('selected'); }
+                    updateFavList();
+                    syncPlaylist();
+                });
+                list.appendChild(div);
+            });
+        } catch(e) {
+            list.innerHTML = '<p style="color:#FF1744;font-family:Barlow,sans-serif;">Failed to load teams.</p>';
+        }
+    }
+
+    // ── NASCAR favorites ──
+
+    function addNascarFavorite() {
+        const input = document.getElementById('nascar-fav-input');
+        const name = input.value.trim();
+        if (!name) return;
+        if (selectedNascarFavorites.map(n => n.toLowerCase()).includes(name.toLowerCase())) {
+            input.value = '';
+            return;
+        }
+        selectedNascarFavorites.push(name);
+        input.value = '';
+        updateNascarFavList();
+        syncPlaylist();
+    }
+
+    function removeNascarFavorite(idx) {
+        selectedNascarFavorites.splice(idx, 1);
+        updateNascarFavList();
+        syncPlaylist();
+    }
+
+    function updateNascarFavList() {
+        const el = document.getElementById('nascar-fav-list');
+        if (!selectedNascarFavorites.length) {
+            el.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:15px;">No favorite drivers added yet.</p>';
+            return;
+        }
+        el.innerHTML = selectedNascarFavorites.map((name, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:1px;">${name}</span>
+                <button onclick="removeNascarFavorite(${i})" style="background:none;border:none;color:#FF1744;cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">✕</button>
+            </div>
+        `).join('');
+    }
+
+
+    // ── IndyCar favorites ──
+
+    function addIndycarFavorite() {
+        const input = document.getElementById('indycar-fav-input');
+        const name = input.value.trim();
+        if (!name) return;
+        if (selectedIndycarFavorites.map(n => n.toLowerCase()).includes(name.toLowerCase())) { input.value = ''; return; }
+        selectedIndycarFavorites.push(name);
+        input.value = '';
+        updateIndycarFavList();
+        syncPlaylist();
+    }
+
+    function removeIndycarFavorite(idx) {
+        selectedIndycarFavorites.splice(idx, 1);
+        updateIndycarFavList();
+        syncPlaylist();
+    }
+
+    function updateIndycarFavList() {
+        const el = document.getElementById('indycar-fav-list');
+        if (!el) return;
+        if (!selectedIndycarFavorites.length) {
+            el.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:15px;">No favorite drivers added yet.</p>';
+            return;
+        }
+        el.innerHTML = selectedIndycarFavorites.map((name, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:1px;">${name}</span>
+                <button onclick="removeIndycarFavorite(${i})" style="background:none;border:none;color:#FF1744;cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">✕</button>
+            </div>
+        `).join('');
+    }
+
+
+    // ── F1 favorites ──
+
+    function addF1Favorite() {
+        const input = document.getElementById('f1-fav-input');
+        const name = input.value.trim();
+        if (!name) return;
+        if (selectedF1Favorites.map(n => n.toLowerCase()).includes(name.toLowerCase())) { input.value = ''; return; }
+        selectedF1Favorites.push(name);
+        input.value = '';
+        updateF1FavList();
+        syncPlaylist();
+    }
+
+    function removeF1Favorite(idx) {
+        selectedF1Favorites.splice(idx, 1);
+        updateF1FavList();
+        syncPlaylist();
+    }
+
+    function updateF1FavList() {
+        const el = document.getElementById('f1-fav-list');
+        if (!el) return;
+        if (!selectedF1Favorites.length) {
+            el.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:15px;">No favorite drivers added yet.</p>';
+            return;
+        }
+        el.innerHTML = selectedF1Favorites.map((name, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:1px;">${name}</span>
+                <button onclick="removeF1Favorite(${i})" style="background:none;border:none;color:#FF1744;cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">✕</button>
+            </div>
+        `).join('');
+    }
+
+
+    // ── Golf favorites ──
+
+    function addGolfFavorite() {
+        const input = document.getElementById('golf-fav-input');
+        const name = input.value.trim();
+        if (!name) return;
+        if (selectedGolfFavorites.map(n => n.toLowerCase()).includes(name.toLowerCase())) {
+            input.value = '';
+            return;
+        }
+        selectedGolfFavorites.push(name);
+        input.value = '';
+        updateGolfFavList();
+        syncPlaylist();
+    }
+
+    function removeGolfFavorite(idx) {
+        selectedGolfFavorites.splice(idx, 1);
+        updateGolfFavList();
+        syncPlaylist();
+    }
+
+    function updateGolfFavList() {
+        const el = document.getElementById('golf-fav-list');
+        if (!selectedGolfFavorites.length) {
+            el.innerHTML = '<p style="color:#444;font-family:\'Barlow\',sans-serif;font-size:15px;">No favorite golfers added yet.</p>';
+            return;
+        }
+        el.innerHTML = selectedGolfFavorites.map((name, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:1px;">${name}</span>
+                <button onclick="removeGolfFavorite(${i})" style="background:none;border:none;color:#FF1744;cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">✕</button>
+            </div>
+        `).join('');
+    }
+
+    let dragSrcKey = null;
+
+    function updateFavList() {
+        const el = document.getElementById('fav-list');
+        if (!selectedTeams.length) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div id="fav-grid"></div><p class="fav-drag-hint">Drag cards to reorder — sets the scoreboard cycle order.</p>';
+        const grid = document.getElementById('fav-grid');
+        selectedTeams.forEach(key => {
+            const colon = key.lastIndexOf(':');
+            const league = key.slice(0, colon);
+            const abbr   = key.slice(colon+1);
+            const meta   = teamMeta[key] || {};
+            const color  = meta.color ? `#${meta.color.replace('#','')}` : '#333';
+            const card   = document.createElement('div');
+            card.className = 'fav-card';
+            card.draggable = true;
+            card.dataset.key = key;
+            card.style.borderColor = color;
+            card.innerHTML = `
+                <button class="fav-remove" data-key="${key}" title="Remove">✕</button>
+                ${meta.logo ? `<img src="${meta.logo}" onerror="this.style.display='none'">` : ''}
+                <span class="fav-abbr" style="color:${color}">${abbr}</span>
+                <span class="fav-league">${LEAGUE_LABELS[league] || league}</span>`;
+            card.addEventListener('dragstart', e => { dragSrcKey = key; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => card.style.opacity='0.35',0); });
+            card.addEventListener('dragend', () => { card.style.opacity='1'; dragSrcKey=null; });
+            card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+            card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+            card.addEventListener('drop', e => {
+                e.preventDefault(); card.classList.remove('drag-over');
+                if (!dragSrcKey || dragSrcKey===key) return;
+                const fi = selectedTeams.indexOf(dragSrcKey);
+                const ti = selectedTeams.indexOf(key);
+                selectedTeams.splice(fi,1); selectedTeams.splice(ti,0,dragSrcKey);
+                updateFavList();
+            });
+            card.querySelector('.fav-remove').addEventListener('click', () => {
+                selectedTeams = selectedTeams.filter(k => k !== key);
+                const match = document.querySelector(`#team-list [data-key="${key}"]`);
+                if (match) match.classList.remove('selected');
+                updateFavList();
+                syncPlaylist();
+            });
+            grid.appendChild(card);
+        });
+    }
+
+
+    // ── Display / Kiosk controls ──
+
+    async function displayAction(action) {
+        const el = document.getElementById('display-status');
+        el.textContent = action==='off' ? 'Sleeping display…' : 'Waking display…';
+        try {
+            const res = await fetch(`/api/display/${action}`, { method:'POST' });
+            const data = await res.json();
+            el.textContent = data.error ? `Error: ${data.error}` : (action==='off'?'Display sleeping.':'Display awake.');
+        } catch(e) { el.textContent = 'Request failed.'; }
+    }
+
+    async function restartBackend() {
+        const msgEl = document.getElementById('backend-msg');
+        msgEl.textContent = 'Restarting backend…';
+        try {
+            await fetch('/api/backend/restart', { method: 'POST' });
+        } catch(e) { /* expected — server drops the connection as it restarts */ }
+        msgEl.textContent = 'Backend restarting — reconnecting…';
+        // Poll until the backend is back up
+        const start = Date.now();
+        const poll = setInterval(async () => {
+            try {
+                const r = await fetch('/api/ping');
+                if (r.ok) { clearInterval(poll); msgEl.textContent = 'Backend back online.'; }
+            } catch(e) {}
+            if (Date.now() - start > 20000) { clearInterval(poll); msgEl.textContent = 'Backend did not respond within 20s — check the service.'; }
+        }, 1500);
+    }
+
+    async function kioskAction(action) {
+        const msgEl = document.getElementById('kiosk-msg');
+        msgEl.textContent = {restart:'Resetting kiosk…',stop:'Stopping kiosk…',start:'Starting kiosk…'}[action] || '…';
+        try {
+            const res  = await fetch(`/api/kiosk/${action}`, { method:'POST' });
+            const data = await res.json();
+            if (data.error) { msgEl.textContent = `Error: ${data.error}`; }
+            else { msgEl.textContent = {restart:'Kiosk reset.',stop:'Kiosk stopped.',start:'Kiosk started.'}[action]||'Done.'; setTimeout(pollKioskStatus,2000); }
+        } catch(e) { msgEl.textContent = 'Request failed.'; }
+    }
+
+    async function pollKioskStatus() {
+        try {
+            const res  = await fetch('/api/kiosk/status');
+            const data = await res.json();
+            const dot  = document.getElementById('kiosk-status-dot');
+            const txt  = document.getElementById('kiosk-status-text');
+            const msgEl = document.getElementById('kiosk-msg');
+            const s    = data.status || 'unknown';
+            if (s === 'not-installed') {
+                txt.textContent      = 'NOT INSTALLED';
+                dot.style.background = '#444';
+                txt.style.color      = '#555';
+                if (!msgEl.textContent) msgEl.textContent = 'kiosk.service not found — re-run install.sh in Kiosk or Combined mode.';
+            } else {
+                txt.textContent      = s.toUpperCase();
+                dot.style.background = s==='active'?'#00E676':s==='inactive'?'#FF1744':'#FFD600';
+                txt.style.color      = s==='active'?'#00E676':s==='inactive'?'#FF1744':'#888';
+            }
+        } catch(e) {}
+    }
+
+    async function uploadLogo(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('logo', file);
+        try {
+            await fetch('/api/upload_logo', { method:'POST', body:fd });
+            document.getElementById('upload-status').textContent = `Uploaded: ${file.name}`;
+            // Refresh preview
+            const img = document.getElementById('logo-preview');
+            const noMsg = document.getElementById('logo-none-msg');
+            img.src = `/static/uploads/logo.png?t=${Date.now()}`;
+            img.style.display = '';
+            if (noMsg) noMsg.style.display = 'none';
+        } catch(e) {
+            document.getElementById('upload-status').textContent = 'Upload failed.';
+        }
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2200);
+    }
+
+
+    // ── Updates ──
+
+    function _renderUpdateState(data) {
+        document.getElementById('update-current-ver').textContent = data.current || '—';
+        const badge   = document.getElementById('update-avail-badge');
+        const applyBtn = document.getElementById('apply-update-btn');
+        const msgEl   = document.getElementById('update-status-msg');
+        const lastEl  = document.getElementById('update-last-checked');
+
+        if (data.update_available) {
+            badge.style.display = '';
+            document.getElementById('update-avail-ver').textContent = data.available || '';
+            applyBtn.style.display = '';
+        } else {
+            badge.style.display = 'none';
+            applyBtn.style.display = 'none';
+        }
+
+        if (data.applying) {
+            msgEl.textContent = 'Applying update…';
+            msgEl.style.color = '#FFD600';
+        } else if (data.last_result === 'error') {
+            msgEl.textContent = '✗ ' + (data.last_message || 'Error');
+            msgEl.style.color = '#FF1744';
+        } else if (data.last_result === 'ok') {
+            msgEl.textContent = data.last_message || '';
+            msgEl.style.color = data.update_available ? '#00E676' : '#555';
+        } else {
+            msgEl.textContent = '';
+        }
+
+        if (data.checked_at) {
+            const d = new Date(data.checked_at * 1000);
+            lastEl.textContent = 'Last checked: ' + d.toLocaleString();
+        } else {
+            lastEl.textContent = '';
+        }
+    }
+
+    async function checkUpdates() {
+        const btn = document.getElementById('check-update-btn');
+        const msgEl = document.getElementById('update-status-msg');
+        btn.disabled = true;
+        btn.textContent = 'CHECKING…';
+        msgEl.textContent = '';
+        try {
+            const res = await fetch('/api/update/check?force=1');
+            const data = await res.json();
+            _renderUpdateState(data);
+        } catch(e) {
+            msgEl.textContent = 'Could not reach update server.';
+            msgEl.style.color = '#FF1744';
+        }
+        btn.disabled = false;
+        btn.textContent = 'CHECK NOW';
+    }
+
+    async function applyUpdate() {
+        if (!confirm('Apply the update and restart? The scoreboard will be offline for ~30 seconds.')) return;
+        const btn = document.getElementById('apply-update-btn');
+        const msgEl = document.getElementById('update-status-msg');
+        btn.disabled = true;
+        btn.textContent = 'APPLYING…';
+        msgEl.textContent = 'Downloading and applying update…';
+        msgEl.style.color = '#FFD600';
+        try {
+            await fetch('/api/update/apply', { method: 'POST' });
+            // Poll for completion
+            let polls = 0;
+            const poll = setInterval(async () => {
+                polls++;
+                try {
+                    const res = await fetch('/api/update/check');
+                    const data = await res.json();
+                    _renderUpdateState(data);
+                    if (!data.applying) clearInterval(poll);
+                } catch(e) {
+                    if (polls > 20) clearInterval(poll);
+                }
+            }, 2000);
+        } catch(e) {
+            msgEl.textContent = 'Failed to start update.';
+            msgEl.style.color = '#FF1744';
+            btn.disabled = false;
+            btn.textContent = 'APPLY UPDATE';
+        }
+    }
+
+    // ── Wi-Fi ──
+
+    async function wifiRefreshStatus() {
+        try {
+            const res = await fetch('/api/wifi/status');
+            const d = await res.json();
+            const dot = document.getElementById('wifi-dot');
+            const label = document.getElementById('wifi-conn-label');
+            const ssidEl = document.getElementById('wifi-ssid-label');
+            const ipEl = document.getElementById('wifi-ip-label');
+            const sigEl = document.getElementById('wifi-signal-label');
+            const discBtn = document.getElementById('wifi-disconnect-btn');
+            const unavail = document.getElementById('wifi-unavail-msg');
+
+            if (!d.available) {
+                dot.style.background = '#444';
+                label.textContent = 'NO ADAPTER';
+                label.style.color = '#555';
+                ssidEl.textContent = '';
+                ipEl.textContent = '';
+                sigEl.textContent = '';
+                discBtn.style.display = 'none';
+                unavail.style.display = '';
+                document.getElementById('wifi-scan-btn').disabled = true;
+                document.getElementById('wifi-connect-btn').disabled = true;
+                return;
+            }
+            unavail.style.display = 'none';
+            document.getElementById('wifi-scan-btn').disabled = false;
+            document.getElementById('wifi-connect-btn').disabled = false;
+            if (d.connected) {
+                dot.style.background = '#00E676';
+                label.textContent = 'CONNECTED';
+                label.style.color = '#00E676';
+                ssidEl.textContent = d.ssid || '';
+                ipEl.textContent = d.ip ? `IP: ${d.ip}` : '';
+                const bars = d.signal >= 75 ? '▂▄▆█' : d.signal >= 50 ? '▂▄▆_' : d.signal >= 25 ? '▂▄__' : '▂___';
+                sigEl.textContent = `${bars} ${d.signal}%`;
+                discBtn.style.display = '';
+            } else {
+                dot.style.background = '#FF1744';
+                label.textContent = 'DISCONNECTED';
+                label.style.color = '#FF1744';
+                ssidEl.textContent = '';
+                ipEl.textContent = '';
+                sigEl.textContent = '';
+                discBtn.style.display = 'none';
+            }
+        } catch(e) {
+            document.getElementById('wifi-conn-label').textContent = 'ERROR';
+        }
+    }
+
+    async function wifiScan() {
+        const btn = document.getElementById('wifi-scan-btn');
+        const list = document.getElementById('wifi-networks-list');
+        btn.disabled = true;
+        btn.textContent = 'SCANNING…';
+        list.innerHTML = '<p style="color:#555;font-family:\'Barlow\',sans-serif;font-size:14px;padding:12px 14px;margin:0;">Scanning for networks…</p>';
+        try {
+            const res = await fetch('/api/wifi/scan');
+            const d = await res.json();
+            if (d.error && !d.networks.length) {
+                list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">${d.error}</p>`;
+            } else if (!d.networks.length) {
+                list.innerHTML = '<p style="color:#555;font-family:\'Barlow\',sans-serif;font-size:14px;padding:12px 14px;margin:0;">No networks found.</p>';
+            } else {
+                list.innerHTML = d.networks.map(n => {
+                    const bars = n.signal >= 75 ? '▂▄▆█' : n.signal >= 50 ? '▂▄▆_' : n.signal >= 25 ? '▂▄__' : '▂___';
+                    const lockIcon = n.security && n.security !== 'Open' ? '🔒 ' : '';
+                    const activeStyle = n.active ? 'background:rgba(0,230,118,0.08);border-left:3px solid #00E676;' : 'border-left:3px solid transparent;';
+                    return `<div onclick="wifiSelectNetwork('${n.ssid.replace(/'/g,"\\'")}', '${n.security}')"
+                                 style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid #1a1a1a;${activeStyle}transition:background 0.15s;"
+                                 onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='${n.active ? 'rgba(0,230,118,0.08)' : ''}'">
+                        <span style="font-size:12px;color:#00E676;letter-spacing:1px;font-family:monospace;">${bars}</span>
+                        <span style="flex:1;font-size:15px;font-weight:700;letter-spacing:0.5px;">${lockIcon}${n.ssid}</span>
+                        <span style="font-size:12px;color:#555;font-family:'Barlow',sans-serif;">${n.security || 'Open'}</span>
+                        ${n.active ? '<span style="font-size:12px;color:#00E676;font-family:\'Barlow\',sans-serif;font-weight:700;">✓ CONNECTED</span>' : ''}
+                    </div>`;
+                }).join('');
+            }
+        } catch(e) {
+            list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">Scan failed: ${e.message}</p>`;
+        }
+        btn.disabled = false;
+        btn.textContent = 'SCAN';
+    }
+
+    function wifiSelectNetwork(ssid, security) {
+        document.getElementById('wifi-ssid-input').value = ssid;
+        document.getElementById('wifi-pass-input').value = '';
+        document.getElementById('wifi-pass-input').focus();
+        const isOpen = !security || security === 'Open';
+        document.getElementById('wifi-msg').textContent = isOpen ? `"${ssid}" is an open network — no password needed.` : `Enter password for "${ssid}"`;
+        document.getElementById('wifi-msg').style.color = isOpen ? '#00E676' : '#888';
+    }
+
+    async function wifiConnect() {
+        const ssid = document.getElementById('wifi-ssid-input').value.trim();
+        const pass = document.getElementById('wifi-pass-input').value;
+        const msg = document.getElementById('wifi-msg');
+        const btn = document.getElementById('wifi-connect-btn');
+        if (!ssid) { msg.textContent = 'Enter an SSID.'; msg.style.color = '#FF1744'; return; }
+        btn.disabled = true;
+        btn.textContent = 'CONNECTING…';
+        msg.textContent = `Connecting to "${ssid}"…`;
+        msg.style.color = '#FFD600';
+        try {
+            const res = await fetch('/api/wifi/connect', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid, password: pass})
+            });
+            const d = await res.json();
+            if (d.ok) {
+                msg.textContent = d.message || 'Connected!';
+                msg.style.color = '#00E676';
+                setTimeout(wifiRefreshStatus, 3000);
+            } else {
+                msg.textContent = d.error || d.message || 'Connection failed.';
+                msg.style.color = '#FF1744';
+            }
+        } catch(e) {
+            msg.textContent = 'Request failed.';
+            msg.style.color = '#FF1744';
+        }
+        btn.disabled = false;
+        btn.textContent = 'CONNECT';
+    }
+
+    async function wifiDisconnect() {
+        const msg = document.getElementById('wifi-msg');
+        msg.textContent = 'Disconnecting…';
+        msg.style.color = '#FFD600';
+        try {
+            const res = await fetch('/api/wifi/disconnect', { method: 'POST' });
+            const d = await res.json();
+            msg.textContent = d.ok ? 'Disconnected.' : (d.error || 'Failed.');
+            msg.style.color = d.ok ? '#00E676' : '#FF1744';
+            setTimeout(wifiRefreshStatus, 2000);
+        } catch(e) {
+            msg.textContent = 'Request failed.';
+            msg.style.color = '#FF1744';
+        }
+    }
+
+    // Apply default mode immediately so sections don't flash before settings load
+    setMode('server');
+
+    pollKioskStatus();
+    setInterval(pollKioskStatus, 15000);
+    loadSettings();
+    refreshCacheStatus();
+    wifiRefreshStatus();
+    setInterval(wifiRefreshStatus, 30000);
+
+    // Auto-logout after 15 minutes of inactivity
+    let _inactivityTimer;
+    function _resetInactivity() {
+        clearTimeout(_inactivityTimer);
+        _inactivityTimer = setTimeout(() => { window.location.href = '/logout'; }, 15 * 60 * 1000);
+    }
+    ['mousemove', 'mousedown', 'click', 'keydown', 'keypress', 'input', 'change',
+     'touchstart', 'touchmove', 'pointerdown', 'pointermove', 'scroll', 'wheel'].forEach(e => {
+        document.addEventListener(e, _resetInactivity, { passive: true, capture: true });
+    });
+    _resetInactivity();
+</script>
+</body>
+</html>

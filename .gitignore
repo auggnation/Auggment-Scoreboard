@@ -1,0 +1,15 @@
+# Runtime config & state — generated per-device, contains credentials/tokens
+settings.json
+kiosk.json
+paired_kiosks.json
+
+# User-uploaded media (logos, special-slide images, RSS logos)
+static/uploads/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS cruft
+.DS_Store
+Thumbs.db
