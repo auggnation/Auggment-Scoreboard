@@ -86,6 +86,35 @@ sudo apt --fix-broken install
 
 **Fallback** — If Chrome still isn't found, `install.sh` automatically falls back to `chromium-browser`.
 
+## Service Management
+
+```bash
+# Check status
+sudo systemctl status scoreboard.service
+
+# Restart after config changes
+sudo systemctl restart scoreboard.service
+
+# View live logs
+sudo journalctl -u scoreboard.service -f
+
+# Stop the service
+sudo systemctl stop scoreboard.service
+```
+
+On Kiosk/Combined installs, the browser itself is managed separately:
+
+```bash
+# Check kiosk browser status
+sudo systemctl status kiosk.service
+
+# Restart the kiosk browser
+sudo systemctl restart kiosk.service
+
+# View kiosk browser logs
+sudo journalctl -u kiosk.service -f
+```
+
 ## How It Works & Tips
 
 ### Pairing Kiosks
@@ -102,6 +131,7 @@ The app uses `xset` to control the TV over DPMS/HDMI-CEC for the scheduled "Powe
 
 ## Troubleshooting
 
+* **Apache2 "It Works!" Default Page Instead of the Scoreboard** — That page belongs to Apache2, not this app. The scoreboard listens on port `5000` (Server/Combined) or `5001` (Kiosk), not port 80 — browse to `http://<device-ip>:5000/` instead of the bare IP. If Apache2 isn't needed on that machine, remove it with `sudo systemctl disable --now apache2 && sudo apt purge -y apache2`.
 * **Black Screen on Boot** — Check `systemctl status kiosk.service`. Make sure graphics drivers are installed if it can't open the display.
 * **Unstyled / Broken-Looking Page** — Confirm `static/css/main.css` exists under the install directory; re-run `install.sh` if it's missing.
 * **Data Not Updating** — Check backend logs with `journalctl -u scoreboard -f` and verify the machine has internet access to reach ESPN's APIs.
