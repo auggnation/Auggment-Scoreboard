@@ -7,7 +7,7 @@ from dateutil import parser as dateutil_parser
 
 
 app = Flask(__name__)
-app.secret_key = 'atsi_internal_secure_key'
+app.secret_key = 'scoreboard_internal_secure_key'
 app.permanent_session_lifetime = timedelta(hours=1)
 
 SETTINGS_FILE = 'settings.json'
@@ -225,7 +225,7 @@ def get_settings():
         "teams": [],
         "league_conferences": {},
         "timezone": "America/Chicago",
-        "admin_credentials": {"username": "admin", "password": "atsi"},
+        "admin_credentials": {"username": "admin", "password": "root"},
         "schedule": {
             "shutdown": {"enabled": False, "time": "23:00"},
             "startup":  {"enabled": False, "time": "07:00"},

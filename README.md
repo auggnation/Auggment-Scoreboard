@@ -60,7 +60,7 @@ Once installed, find the device's IP address (`hostname -I` on the Pi, or check 
 | Combined            | `5000` | `http://<device-ip>:5000/settings`  |
 | Kiosk               | `5001` | `http://<device-ip>:5001/settings`  |
 
-**Default login is `admin` / `atsi`** — change this immediately from the Settings page (Admin Credentials section) once you're in.
+**Default login is `admin` / `root`** — change this immediately from the Settings page (Admin Credentials section) once you're in.
 
 If you can't find the device's IP (e.g. no DHCP, no router access), `install.sh` automatically assigns a fallback static IP of **`192.168.1.250`** on the wired Ethernet port as a failsafe — connect a laptop to the same switch/router and browse to `http://192.168.1.250:5000/settings` (or `:5001` for kiosk-only installs).
 

@@ -57,8 +57,8 @@ esac
 echo ""
 
 # ─── USERNAME ────────────────────────────────────────────────────────────────
-read -rp "Enter the username to install under [default: atsi]: " APP_USER
-APP_USER="${APP_USER:-atsi}"
+read -rp "Enter the username to install under [default: root]: " APP_USER
+APP_USER="${APP_USER:-root}"
 [ -z "$APP_USER" ] && echo "ERROR: Username cannot be empty." && exit 1
 APP_DIR="/home/$APP_USER/scoreboard"
 
