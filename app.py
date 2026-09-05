@@ -61,6 +61,19 @@ LEAGUE_LABELS = {
     "baseball/milb": "MiLB",
     "lacrosse/pll": "PLL",
     "lacrosse/nll": "NLL",
+    "cricket/current": "Cricket",
+    "cricket/8048": "IPL",
+    "cricket/8052": "County",
+    "cricket/8623": "CPL",
+    "cricket/8604": "T20 WC",
+    "rugby/267979": "Prem Rugby",
+    "rugby/270559": "Top 14",
+    "rugby/180659": "6 Nations",
+    "rugby/270557": "URC",
+    "rugby/242041": "Super Rugby",
+    "rugby/289234": "Rugby Tests",
+    "rugby/164205": "Rugby WC",
+    "rugby/289262": "MLR",
     "racing/nascar-cup": "NASCAR",
     "racing/irl": "IndyCar",
     "racing/f1": "F1",
@@ -92,6 +105,19 @@ ESPN_API_PATHS = {
     "baseball/milb": ("baseball", "milb"),
     "lacrosse/pll": ("lacrosse", "pll"),
     "lacrosse/nll": ("lacrosse", "nll"),
+    "cricket/current": ("cricket", "current"),
+    "cricket/8048": ("cricket", "8048"),
+    "cricket/8052": ("cricket", "8052"),
+    "cricket/8623": ("cricket", "8623"),
+    "cricket/8604": ("cricket", "8604"),
+    "rugby/267979": ("rugby", "267979"),
+    "rugby/270559": ("rugby", "270559"),
+    "rugby/180659": ("rugby", "180659"),
+    "rugby/270557": ("rugby", "270557"),
+    "rugby/242041": ("rugby", "242041"),
+    "rugby/289234": ("rugby", "289234"),
+    "rugby/164205": ("rugby", "164205"),
+    "rugby/289262": ("rugby", "289262"),
     "racing/nascar-cup": ("racing", "nascar-cup"),
     "racing/irl": ("racing", "irl"),
     "racing/f1": ("racing", "f1"),
@@ -99,7 +125,10 @@ ESPN_API_PATHS = {
 }
 
 ESPN_WEB_API_LEAGUES = {"softball/college-softball"}
-ESPN_NO_DATE_LEAGUES = {"baseball/college-baseball", "softball/college-softball"}
+ESPN_NO_DATE_LEAGUES = {
+    "baseball/college-baseball", "softball/college-softball",
+    "cricket/current", "cricket/8048", "cricket/8052", "cricket/8623", "cricket/8604",
+}
 MOTORSPORTS_LEAGUES = {"racing/nascar-cup", "racing/irl", "racing/f1"}
 MOTORSPORTS_FAV_KEY = {
     "racing/nascar-cup": "nascar_favorites",
@@ -457,7 +486,52 @@ def _fetch_nascar_com_events():
     }]
 
 
+def _discover_espn_series(sport):
+    ids = []
+    seen = set()
+    for region in ("us", "in", "gb", "au", "za"):
+        try:
+            r = requests.get(
+                f"https://site.web.api.espn.com/apis/personalized/v2/scoreboard/header?sport={sport}&region={region}&lang=en",
+                timeout=8,
+            )
+            if not r.ok:
+                continue
+            for s in r.json().get("sports", []):
+                for lg in s.get("leagues") or []:
+                    lid = str(lg.get("slug") or lg.get("id") or "")
+                    if lid and lid not in seen:
+                        seen.add(lid)
+                        ids.append(lid)
+        except Exception:
+            continue
+    return ids
+
+
+def _fetch_discovered_events(sport, series_ids):
+    events = []
+    seen = set()
+    for lid in series_ids:
+        try:
+            r = requests.get(
+                f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{lid}/scoreboard",
+                timeout=8,
+            )
+            if not r.ok:
+                continue
+            for e in r.json().get("events", []):
+                eid = e.get("id")
+                if eid and eid not in seen:
+                    seen.add(eid)
+                    events.append(e)
+        except Exception:
+            continue
+    return events
+
+
 def _fetch_league_raw(path, league_conferences, days_back=0, days_ahead=14):
+    if path == "cricket/current":
+        return _fetch_discovered_events("cricket", _discover_espn_series("cricket"))
     sport, league = ESPN_API_PATHS.get(path, (path.split('/')[0], path.split('/')[-1]))
     now = datetime.now()
     start = now - timedelta(days=days_back)
@@ -1171,8 +1245,8 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                     competitors = comp['competitors']
                     home = next((c for c in competitors if c.get('homeAway') == 'home'), competitors[0])
                     away = next((c for c in competitors if c.get('homeAway') == 'away'), competitors[-1])
-                    h_abbr = home['team']['abbreviation']
-                    a_abbr = away['team']['abbreviation']
+                    h_abbr = home['team'].get('abbreviation') or home['team'].get('shortDisplayName') or home['team'].get('displayName', '?')
+                    a_abbr = away['team'].get('abbreviation') or away['team'].get('shortDisplayName') or away['team'].get('displayName', '?')
                     h_score = home.get('score', '0') or '0'
                     a_score = away.get('score', '0') or '0'
                     state = event['status']['type']['state']

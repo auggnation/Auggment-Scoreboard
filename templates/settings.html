@@ -398,6 +398,16 @@
             <option value="soccer/fifa.wwc">Women's WC</option>
             <option value="lacrosse/pll">PLL</option>
             <option value="lacrosse/nll">NLL</option>
+            <option value="cricket/8048">IPL</option>
+            <option value="cricket/8052">County</option>
+            <option value="cricket/8623">CPL</option>
+            <option value="rugby/267979">Prem Rugby</option>
+            <option value="rugby/270559">Top 14</option>
+            <option value="rugby/180659">6 Nations</option>
+            <option value="rugby/270557">URC</option>
+            <option value="rugby/242041">Super Rugby</option>
+            <option value="rugby/289234">Rugby Tests</option>
+            <option value="rugby/289262">MLR</option>
         </select>
         <div id="team-list"><p style="color:#444;font-family:'Barlow',sans-serif;">Select a league above.</p></div>
         <div id="fav-list"></div>
@@ -512,6 +522,19 @@
             <div class="league-check" data-val="golf/pga"><span>PGA</span></div>
             <div class="league-check" data-val="lacrosse/pll"><span>PLL</span></div>
             <div class="league-check" data-val="lacrosse/nll"><span>NLL</span></div>
+            <div class="league-check" data-val="cricket/current"><span>Cricket</span></div>
+            <div class="league-check" data-val="cricket/8048"><span>IPL</span></div>
+            <div class="league-check" data-val="cricket/8052"><span>County</span></div>
+            <div class="league-check" data-val="cricket/8623"><span>CPL</span></div>
+            <div class="league-check" data-val="cricket/8604"><span>T20 WC</span></div>
+            <div class="league-check" data-val="rugby/267979"><span>Prem Rugby</span></div>
+            <div class="league-check" data-val="rugby/270559"><span>Top 14</span></div>
+            <div class="league-check" data-val="rugby/180659"><span>6 Nations</span></div>
+            <div class="league-check" data-val="rugby/270557"><span>URC</span></div>
+            <div class="league-check" data-val="rugby/242041"><span>Super Rugby</span></div>
+            <div class="league-check" data-val="rugby/289234"><span>Rugby Tests</span></div>
+            <div class="league-check" data-val="rugby/164205"><span>Rugby WC</span></div>
+            <div class="league-check" data-val="rugby/289262"><span>MLR</span></div>
         </div>
     </div>
 
@@ -748,6 +771,11 @@
         "baseball/milb": "MiLB",
         "racing/nascar-cup": "NASCAR", "racing/irl": "IndyCar", "racing/f1": "F1",
         "golf/pga": "PGA", "lacrosse/pll": "PLL", "lacrosse/nll": "NLL",
+        "cricket/current": "Cricket", "cricket/8048": "IPL", "cricket/8052": "County",
+        "cricket/8623": "CPL", "cricket/8604": "T20 WC",
+        "rugby/267979": "Prem Rugby", "rugby/270559": "Top 14", "rugby/180659": "6 Nations",
+        "rugby/270557": "URC", "rugby/242041": "Super Rugby", "rugby/289234": "Rugby Tests",
+        "rugby/164205": "Rugby WC", "rugby/289262": "MLR",
     };
 
     const COLLEGE_LEAGUES = new Set([
@@ -765,6 +793,7 @@
         'football': '🏈', 'baseball': '⚾', 'basketball': '🏀',
         'hockey': '🏒', 'soccer': '⚽', 'softball': '🥎',
         'volleyball': '🏐', 'racing': '🏎️', 'golf': '⛳', 'lacrosse': '🥍',
+        'cricket': '🏏', 'rugby': '🏉',
     };
 
     function _sportIcon(leaguePath) {
