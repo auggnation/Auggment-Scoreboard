@@ -24,7 +24,7 @@ It pulls real-time scores from ESPN for the major pro and college leagues, plus 
 * **Operating System**
   * Raspberry Pi: Raspberry Pi OS (Lite is recommended for Server; Desktop for Kiosk/Combined).
   * Generic PC: Debian or Ubuntu-based Linux distributions.
-* **Hardware**: Raspberry Pi 3/4/5 or any x86_64 PC, plus a TV or monitor for Kiosk/Combined mode.
+* **Hardware**: Raspberry Pi 5 or any x86_64 PC, plus a TV or monitor for Kiosk/Combined mode.
 * **Environment**: The installer targets a non-graphical (CLI) fresh OS install. For Kiosk/Combined mode it installs and configures its own minimal window manager (Openbox) and display server (X11) — you don't need a desktop environment pre-installed.
 
 ## Installation
