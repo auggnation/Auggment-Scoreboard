@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Gameday Scoreboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="pg-index">
+    <header id="main-header">
+        <div id="header-left">
+            <span id="display-name">Scoreboard</span>
+            <span id="header-sep">|</span>
+            <span id="top-clock">00:00 PM</span>
+        </div>
+        <div id="weather">--</div>
+    </header>
+
+
+    <div class="stage" id="main-stage">
+        <div class="slide active" id="logo-slide">
+            <center><img src="/static/uploads/logo.png" onerror="this.src='https://via.placeholder.com/560x400?text=SCOREBOARD'"></center>
+        </div>
+    </div>
+
+
+    <footer id="main-footer">
+        <div class="ticker-wrap">
+            <div class="ticker" id="ticker-text">LOADING GAMEDAY FEED...</div>
+        </div>
+    </footer>
+
+
+    <script>
+        function updateScale() {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const scale = Math.max(1, Math.min(vw / 1920, vh / 1080));
+            document.documentElement.style.setProperty('--ui-scale', scale);
+            document.documentElement.style.setProperty('--px', scale + 'px');
+        }
+
+
+        // ─── ORIENTATION ───
+        let currentOrientation = 'auto';
+
+
+        function applyOrientation(orientation) {
+            currentOrientation = orientation;
+            const isPortrait  = window.innerHeight > window.innerWidth;
+            // Phone heuristic: portrait phones have width ≤ 600px; landscape phones flip so
+            // innerWidth becomes the long side (> 600px) but innerHeight stays small (≤ 500px).
+            // A rotated TV in landscape has height 1080px, well above 500px.
+            const isPhone = window.innerWidth <= 600 || window.innerHeight <= 500;
+
+            let useVertical = false;
+            let usePhone    = false;
+
+            if (orientation === 'vertical') {
+                useVertical = true;
+                if (isPhone) usePhone = true;   // scale for the actual screen, not a TV
+            } else if (orientation === 'phone') {
+                useVertical = true;
+                usePhone    = true;
+            } else if (orientation === 'auto') {
+                if (isPortrait) {
+                    useVertical = true;
+                    if (isPhone) usePhone = true;
+                } else if (isPhone) {
+                    usePhone = true;            // landscape phone: apply phone scaling
+                }
+            }
+            // 'horizontal' or auto-landscape non-phone: neither class set
+
+            document.body.classList.toggle('vertical', useVertical);
+            document.body.classList.toggle('phone',    usePhone);
+        }
+
+
+        window.addEventListener('resize', () => { updateScale(); applyOrientation(currentOrientation); });
+        updateScale();
+        applyOrientation('auto');
+        // ─── CLOCK ───
+        let _lastClockStr = '';
+        function updateClock() {
+            const now = new Date();
+            const s = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            if (s !== _lastClockStr) {
+                _lastClockStr = s;
+                document.getElementById('top-clock').innerText = s;
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+
+        // ─── HEADER: visible 5 min, hidden 5 min, alternating ───
+        let headerVisible = true;
+        setInterval(() => {
+            headerVisible = !headerVisible;
+            document.getElementById('main-header').classList.toggle('hidden', !headerVisible);
+        }, 5 * 60 * 1000);
+
+
+        // ─── TICKER BORDER: distinct color every 2 min for burn-in prevention (10 min full cycle) ───
+        const TICKER_COLORS = [
+            '#099afc', // blue
+            '#FFD600', // yellow
+            '#FF6D00', // orange
+            '#FF1744', // red
+            '#E040FB', // purple
+        ];
+        let tickerColorIndex = 0;
+
+
+        function nextTickerColor() {
+            tickerColorIndex = (tickerColorIndex + 1) % TICKER_COLORS.length;
+            document.getElementById('main-footer').style.borderTopColor = TICKER_COLORS[tickerColorIndex];
+        }
+
+
+        document.getElementById('main-footer').style.borderTopColor = TICKER_COLORS[tickerColorIndex];
+        setInterval(nextTickerColor, 175 * 1000);
+
+
+        // ─── DATA ───
+        let previousScores = {}; // key: eventId, value: score string for flash detection
+        let currentSlideKey = 'logo';
+        let slideTimer = null;
+        let slideInterval = 13000;
+        let lastTickerHtml = '';
+        let settingsVersion = null;
+        let appVersion = null;
+
+
+        function buildScoreText(awayScore, homeScore) {
+            return `${awayScore}-${homeScore}`;
+        }
+
+
+        function patchStage(newEls) {
+            const stage = document.getElementById('main-stage');
+            const existingByKey = new Map();
+            for (const el of stage.children) {
+                const k = el.dataset.slideKey;
+                if (k) existingByKey.set(k, el);
+            }
+            const finalEls = newEls.map(newEl => {
+                const k = newEl.dataset.slideKey;
+                if (k && existingByKey.has(k)) {
+                    const ex = existingByKey.get(k);
+                    if (ex.innerHTML !== newEl.innerHTML) ex.innerHTML = newEl.innerHTML;
+                    return ex;
+                }
+                return newEl;
+            });
+            stage.replaceChildren(...finalEls);
+            const activeEl = finalEls.find(el => el.dataset.slideKey === currentSlideKey);
+            if (activeEl) {
+                finalEls.forEach(el => el.classList.toggle('active', el === activeEl));
+            } else if (finalEls.length) {
+                finalEls.forEach(el => el.classList.remove('active'));
+                finalEls[0].classList.add('active');
+                currentSlideKey = finalEls[0].dataset.slideKey || '';
+            }
+            ensureSlideshow();
+        }
+
+        function advanceSlide() {
+            const slides = [...document.querySelectorAll('#main-stage .slide')];
+            if (!slides.length) return;
+            const idx = slides.findIndex(s => s.classList.contains('active'));
+            if (idx !== -1) {
+                const outgoing = slides[idx];
+                outgoing.classList.remove('active');
+                outgoing.classList.add('slide-exiting');
+                setTimeout(() => outgoing.classList.remove('slide-exiting'), 400);
+            }
+            const nextIdx = ((idx !== -1 ? idx : -1) + 1) % slides.length;
+            const incoming = slides[nextIdx];
+            incoming.classList.add('active', 'slide-entering');
+            setTimeout(() => incoming.classList.remove('slide-entering'), 600);
+            currentSlideKey = incoming.dataset.slideKey || '';
+        }
+
+        function ensureSlideshow() {
+            if (!slideTimer) {
+                slideTimer = setInterval(advanceSlide, slideInterval);
+            }
+        }
+
+        async function updateData() {
+            try {
+                const res = await fetch('/api/data');
+                const data = await res.json();
+
+                // Reload if settings or app version changed since last poll
+                if (settingsVersion && data.settings_updated_at && data.settings_updated_at !== settingsVersion) {
+                    window.location.reload();
+                    return;
+                }
+                settingsVersion = data.settings_updated_at || settingsVersion;
+                if (appVersion && data.app_version && data.app_version !== appVersion) {
+                    window.location.reload();
+                    return;
+                }
+                appVersion = data.app_version || appVersion;
+
+                // Apply slide transition class
+                const trans = data.slide_transition || 'slide-right';
+                document.body.classList.remove('transition-slide-right', 'transition-slide-left', 'transition-slide-top', 'transition-slide-bottom', 'transition-fade');
+                document.body.classList.add('transition-' + trans);
+
+                // Update slide interval if duration changed
+                const newInterval = (data.slide_duration || 8) * 1000;
+                if (newInterval !== slideInterval) {
+                    slideInterval = newInterval;
+                    if (slideTimer) {
+                        clearInterval(slideTimer);
+                        slideTimer = setInterval(advanceSlide, slideInterval);
+                    }
+                }
+
+                // Apply user-configured colors as CSS variables
+                const colors = data.colors || {};
+                const root = document.documentElement;
+                root.style.setProperty('--live-color',         colors.live         || '#00E676');
+                root.style.setProperty('--final-color',        colors.final        || '#FF1744');
+                root.style.setProperty('--flash-color',        colors.flash        || '#FFD600');
+                root.style.setProperty('--team-abbr-color',    colors.team_abbr    || '#ffffff');
+                root.style.setProperty('--league-label-color', colors.league_label || '#099afc');
+                root.style.setProperty('--ticker-base-color',  colors.ticker_base  || '#ffffff');
+                root.style.setProperty('--winner-color',       colors.winner       || '#00E676');
+                root.style.setProperty('--loser-color',        colors.loser        || '#FF1744');
+                root.style.setProperty('--tie-color',          colors.tie_score    || '#FFD600');
+                root.style.setProperty('--fav-abbr-color',     colors.fav_abbr     || '#F5A800');
+                root.style.setProperty('--fav-score-color',    colors.fav_score    || '#F5A800');
+                root.style.setProperty('--nascar-num-color',   colors.nascar_num   || '#FFD600');
+                root.style.setProperty('--weather-color',      colors.weather      || '#dddddd');
+                root.style.setProperty('--pre-time-color',     colors.pre_time     || '#ffffff');
+                root.style.setProperty('--score-sep-color',    colors.score_sep    || '#888888');
+                root.style.setProperty('--ticker-live-color',  colors.ticker_live  || colors.live || '#00E676');
+                root.style.setProperty('--ticker-final-color', colors.ticker_final || colors.final || '#FF1744');
+                root.style.setProperty('--ticker-sep-color',   colors.ticker_sep   || '#444444');
+                root.style.setProperty('--race-pos-color',     colors.race_pos     || '#F5A800');
+                root.style.setProperty('--race-laps-color',    colors.race_laps    || '#888888');
+                root.style.setProperty('--card-subtext-color', colors.card_subtext || '#555555');
+
+                // Surface colors (dark/light theme backgrounds, cards, borders)
+                const isLight = data.theme === 'light';
+                root.style.setProperty('--vs-color',     (isLight ? colors.light_vs : colors.dark_vs) || colors.vs_color || '#ffffff');
+                root.style.setProperty('--bg',           colors.dark_bg         || '#080808');
+                root.style.setProperty('--card-bg',      colors.dark_card       || '#111111');
+                root.style.setProperty('--border',       colors.dark_border     || '#2a2a2a');
+                root.style.setProperty('--ticker-bg',    colors.dark_ticker_bg  || '#000000');
+                root.style.setProperty('--light-bg',     colors.light_bg        || '#c4d6f0');
+                root.style.setProperty('--light-card',   colors.light_card      || '#ffffff');
+                root.style.setProperty('--light-border', colors.light_border    || '#ffffff');
+
+                // Header
+                document.getElementById('display-name').innerText = data.display_name;
+                document.getElementById('display-name').style.color = data.header_color;
+                document.getElementById('top-clock').style.color = data.header_color;
+                document.getElementById('header-sep').style.color = data.header_color;
+
+
+                document.getElementById('weather').innerText = data.weather || '--';
+
+
+                // Apply theme and orientation from settings
+                document.body.classList.toggle('light', data.theme === 'light');
+                applyOrientation(data.cast_orientation || 'auto');
+
+
+                // ─── BUILD SLIDES ───
+                // Collect slides into category buckets, then sort by slide_order
+                const catSlides = {};
+                function addSlide(cat, html) {
+                    const el = document.createElement('div');
+                    el.innerHTML = html.trim();
+                    const node = el.firstElementChild;
+                    if (!catSlides[cat]) catSlides[cat] = [];
+                    catSlides[cat].push(node);
+                }
+
+                // Logo
+                addSlide('logo', `
+                    <div class="slide" data-slide-key="logo" id="logo-slide">
+                        <center><img src="/static/uploads/logo.png?t=${Date.now()}" onerror="this.style.display='none'"></center>
+                    </div>`);
+
+                const flashIds = new Set();
+                (data.teams || []).forEach(t => {
+                    const key = `${t.away_name}@${t.home_name}`;
+                    const scoreNow = buildScoreText(t.away_score, t.home_score);
+                    let doFlash = false;
+                    if (!t.is_pre && previousScores[key] && previousScores[key] !== scoreNow) {
+                        doFlash = true;
+                        flashIds.add(key);
+                    }
+                    previousScores[key] = scoreNow;
+
+
+                    const stateClass = t.color_state; // 'pre', 'live', 'final'
+                    const flashAttr = doFlash ? 'data-flash="1"' : '';
+
+                    // Determine win/loss/tie class for each side
+                    const awayWinClass = !t.is_pre && t.winner === 'away' ? 'win'
+                        : !t.is_pre && t.winner === 'home' ? 'loss'
+                        : !t.is_pre && t.winner === 'tie'  ? 'tie' : '';
+                    const homeWinClass = !t.is_pre && t.winner === 'home' ? 'win'
+                        : !t.is_pre && t.winner === 'away' ? 'loss'
+                        : !t.is_pre && t.winner === 'tie'  ? 'tie' : '';
+
+                    // Fav team classes
+                    const awayFavCls = t.away_is_fav ? 'fav-team-abbr' : '';
+                    const homeFavCls = t.home_is_fav ? 'fav-team-abbr' : '';
+                    const awayScoreFavCls = t.away_is_fav && !awayWinClass ? 'fav-team-score' : '';
+                    const homeScoreFavCls = t.home_is_fav && !homeWinClass ? 'fav-team-score' : '';
+
+                    let centerContent = '';
+                    let statusContent = '';
+                    let statusVContent = '';  // vertical-mode center row
+
+                    if (t.is_pre) {
+                        centerContent = `<div class="score-display pre vs-label">VS</div>`;
+                        statusContent = `<div class="status-bar pre">${t.local_time || t.status}</div>`;
+                        statusVContent = `<div class="status-v pre">${t.local_time || t.status}</div>`;
+                    } else if (stateClass === 'live') {
+                        centerContent = `
+                            <div class="score-display live">
+                                <span class="score-part ${awayWinClass} ${awayScoreFavCls}">${t.away_score}</span>
+                                <span class="score-sep"> – </span>
+                                <span class="score-part ${homeWinClass} ${homeScoreFavCls}">${t.home_score}</span>
+                            </div>
+                        `;
+                        statusContent = `<div class="status-bar live"><span class="live-dot"></span>${t.status}</div>`;
+                        statusVContent = `<div class="status-v live"><span class="live-dot"></span>${t.status}</div>`;
+                    } else {
+                        // Final
+                        centerContent = `
+                            <div class="score-display final">
+                                <span class="score-part ${awayWinClass} ${awayScoreFavCls}">${t.away_score}</span>
+                                <span class="score-sep"> – </span>
+                                <span class="score-part ${homeWinClass} ${homeScoreFavCls}">${t.home_score}</span>
+                            </div>
+                        `;
+                        statusContent = `<div class="status-bar final">FINAL</div>`;
+                        statusVContent = `<div class="status-v final">FINAL</div>`;
+                    }
+
+                    const vEventTime = t.is_pre ? (t.local_time || t.status) : t.status;
+                    const vLiveDot = stateClass === 'live' ? '<span class="live-dot"></span>' : '';
+                    addSlide(t.league_path || 'teams', `
+                        <div class="slide" data-slide-key="team:${t.away_name}@${t.home_name}" ${flashAttr}>
+                            <div class="card ${stateClass} ${doFlash ? 'flash' : ''}" id="card-${key.replace(/[^a-z0-9]/gi,'_')}">
+                                ${stateClass === 'final' ? '<div class="final-badge">F</div>' : ''}
+                                <div class="league-tag">${t.league_label}</div>
+                                <div class="teams-grid">
+                                    <div class="team-block away ${awayWinClass}">
+                                        <img src="${t.away_logo}" class="team-logo${t.away_is_fav ? ' fav-team-logo' : ''}" onerror="this.style.display='none'">
+                                        <span class="team-abbr ${awayFavCls}">${t.away_name}</span>
+                                        <span class="team-score-v ${stateClass} ${awayWinClass} ${awayScoreFavCls}">${t.away_score}</span>
+                                    </div>
+                                    <div class="center-col">
+                                        ${centerContent}
+                                        ${statusVContent}
+                                    </div>
+                                    <div class="team-block home ${homeWinClass}">
+                                        <img src="${t.home_logo}" class="team-logo${t.home_is_fav ? ' fav-team-logo' : ''}" onerror="this.style.display='none'">
+                                        <span class="team-abbr ${homeFavCls}">${t.home_name}</span>
+                                        <span class="team-score-v ${stateClass} ${homeWinClass} ${homeScoreFavCls}">${t.home_score}</span>
+                                    </div>
+                                </div>
+                                <div class="v-event">
+                                    <span class="v-event-league">${t.league_label}</span>
+                                    <span class="v-event-time ${stateClass}">${vLiveDot}${vEventTime}</span>
+                                </div>
+                                ${statusContent}
+                            </div>
+                        </div>
+                    `);
+                });
+
+
+                // ─── RACING SLIDES (NASCAR / IndyCar / F1) ───
+                function ordSuffix(n) {
+                    const num = parseInt(n);
+                    if (isNaN(num)) return String(n);
+                    const v = Math.abs(num) % 100;
+                    return num + (['th','st','nd','rd'][(v-20)%10] || ['th','st','nd','rd'][v] || 'th');
+                }
+
+                (data.races || []).forEach(race => {
+                    const sc = race.color_state;
+                    const liveDot = sc === 'live' ? '<span class="live-dot"></span>' : '';
+                    const favDriver = (race.drivers || []).find(d => d.is_fav);
+
+                    const flagColors = {Green:'#00E676', Yellow:'#FFD600', Red:'#FF1744', Checkered:'#ffffff', Caution:'#FFD600', Debris:'#FFD600', 'Pre-Race':'#888'};
+                    const flagColor = flagColors[race.flag_label] || '#888';
+                    const flagHtml = race.flag_label
+                        ? `<span style="display:inline-block;margin-left:calc(8*var(--px));font-size:calc(10*var(--px));font-weight:900;letter-spacing:calc(2*var(--px));color:${flagColor};vertical-align:middle;">● ${race.flag_label.toUpperCase()}</span>`
+                        : '';
+
+                    const isOver = sc === 'final' || race.flag_label === 'Checkered';
+                    const lapsRemaining = (race.laps_in_race > 0 && race.lap > 0) ? race.laps_in_race - race.lap : 0;
+                    let lapsInfo = '';
+                    if (isOver) {
+                        lapsInfo = `<div class="race-laps-info done">🏁 FINAL</div>`;
+                    } else if (race.lap > 0 && race.laps_in_race > 0) {
+                        lapsInfo = `<div class="race-laps-info">LAP ${race.lap} / ${race.laps_in_race} &nbsp;·&nbsp; ${lapsRemaining} TO GO</div>`;
+                    } else if (sc === 'pre') {
+                        lapsInfo = `<div class="race-laps-info">${race.status}</div>`;
+                    }
+
+                    const statusBar = `<div class="status-bar ${sc}">${liveDot}${race.status}</div>`;
+
+                    if (favDriver) {
+                        const place = ordSuffix(favDriver.pos);
+                        addSlide(race.league_path || 'racing', `
+                            <div class="slide" data-slide-key="race:${race.league_label}:${race.race_name}:fav">
+                                <div class="card ${sc}">
+                                    ${isOver ? '<div class="final-badge">F</div>' : ''}
+                                    <div class="league-tag">${race.league_label || 'NASCAR'}${flagHtml}</div>
+                                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:calc(6*var(--px)) 0;gap:calc(4*var(--px));">
+                                        <div class="score-display ${sc}">${place}</div>
+                                        <div style="display:flex;align-items:center;gap:calc(14*var(--px));margin-top:calc(2*var(--px));">
+                                            <span class="nascar-number">#${favDriver.car}</span>
+                                            <span class="team-abbr">${favDriver.name}</span>
+                                        </div>
+                                        ${lapsInfo}
+                                        <div class="card-subtext">${race.race_name}</div>
+                                    </div>
+                                    <div class="v-event">
+                                        <span class="v-event-league">${race.league_label || 'NASCAR'}</span>
+                                        <span class="v-event-time ${sc}">${liveDot}${favDriver.name} P${favDriver.pos} #${favDriver.car}</span>
+                                    </div>
+                                    ${statusBar}
+                                </div>
+                            </div>`);
+                    }
+                });
+
+                // ─── GOLF SLIDES ───
+                (data.golf || []).forEach(golf => {
+                    const sc = golf.color_state;
+                    const liveDot = sc === 'live' ? '<span class="live-dot"></span>' : '';
+                    const statusBar = `<div class="status-bar ${sc}">${liveDot}${golf.status}</div>`;
+                    const favGolfer = (golf.golfers || []).find(g => g.is_fav);
+
+                    if (favGolfer) {
+                        const isGolfOver = sc === 'final';
+                        let holeInfo = '';
+                        if (isGolfOver) {
+                            holeInfo = `<div class="race-laps-info done">🏁 FINAL</div>`;
+                        } else {
+                            holeInfo = `<div class="race-laps-info">${golf.status}</div>`;
+                        }
+                        addSlide(golf.league_path || 'golf/pga', `
+                            <div class="slide" data-slide-key="golf:${golf.tournament_name}:fav">
+                                <div class="card ${sc}">
+                                    ${isGolfOver ? '<div class="final-badge">F</div>' : ''}
+                                    <div class="league-tag">PGA</div>
+                                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:calc(6*var(--px)) 0;gap:calc(4*var(--px));">
+                                        <div class="score-display ${sc}">${favGolfer.pos}</div>
+                                        <div style="display:flex;align-items:center;gap:calc(14*var(--px));margin-top:calc(2*var(--px));">
+                                            <span class="nascar-number">${favGolfer.strokes}</span>
+                                            <span class="team-abbr">${favGolfer.name}</span>
+                                        </div>
+                                        ${holeInfo}
+                                        <div class="card-subtext">${golf.tournament_name}</div>
+                                    </div>
+                                    <div class="v-event">
+                                        <span class="v-event-league">PGA</span>
+                                        <span class="v-event-time ${sc}">${liveDot}${favGolfer.name} ${favGolfer.pos} (${favGolfer.strokes})</span>
+                                    </div>
+                                    ${statusBar}
+                                </div>
+                            </div>`);
+                    }
+                });
+
+                // ─── SPECIALS + LOCAL SCHEDULE ───
+                [...(data.specials || []), ...(data.local_schedule_items || [])].forEach((sp, i) => {
+                    const color = sp.color || '#F5A800';
+                    const specialEl = document.createElement('div');
+                    specialEl.className = 'slide';
+                    specialEl.dataset.slideKey = `special-${i}:${sp.type}:${sp.title || ''}:${sp.uid || ''}`;
+                    if (sp.type === 'schedule') {
+                        const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
+                        specialEl.innerHTML = `
+                            <div class="card pre">
+                                <div class="league-tag">${sp.label}</div>
+                                <div class="teams-grid">
+                                    <div class="team-block away"><span class="team-abbr">${sp.away_team}</span></div>
+                                    <div class="center-col"><div class="score-display pre vs-label">VS</div></div>
+                                    <div class="team-block home"><span class="team-abbr">${sp.home_team}</span></div>
+                                </div>
+                                <div class="v-event">
+                                    <span class="v-event-league">${sp.label}</span>
+                                    ${dt ? `<span class="v-event-time pre">${dt}</span>` : ''}
+                                </div>
+                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
+                            </div>`;
+                    } else if (sp.type === 'rss') {
+                        const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
+                        const logoHtml = sp.logo ? `<img src="${sp.logo}">` : '';
+                        specialEl.innerHTML = `
+                            <div class="card pre rss-card">
+                                <div class="league-tag">${sp.tag || 'CUSTOM'}</div>
+                                <div class="rss-body">
+                                    <div class="rss-logo-col">${logoHtml}<div class="rss-label">${sp.label}</div></div>
+                                    <div class="rss-text-col">
+                                        <div class="rss-event">${sp.title}</div>
+                                        ${sp.body ? `<div class="rss-subevent">${sp.body}</div>` : ''}
+                                    </div>
+                                </div>
+                                ${dt ? `<div class="v-event"><span class="v-event-time pre">${dt}</span></div>` : ''}
+                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
+                            </div>`;
+                    } else if (sp.type === 'image' && sp.image) {
+                        specialEl.innerHTML = `
+                            <div class="card special-card" style="border-color:${color};padding:0;overflow:hidden;">
+                                <img src="${sp.image}" style="width:100%;height:100%;object-fit:contain;">
+                            </div>`;
+                    } else if (sp.type === 'url' && sp.url) {
+                        specialEl.innerHTML = `
+                            <div class="card" style="padding:0;overflow:hidden;border-color:#333;">
+                                <iframe src="${sp.url}"
+                                        style="width:100%;height:100%;border:none;display:block;"
+                                        title="${sp.url_label || sp.url}"
+                                        sandbox="allow-scripts allow-same-origin allow-popups">
+                                </iframe>
+                            </div>`;
+                    } else {
+                        specialEl.innerHTML = `
+                            <div class="card special-card" style="border-color:${color}">
+                                <div class="special-title" style="color:${color}">${sp.title}</div>
+                                ${sp.body ? `<div class="special-body">${sp.body}</div>` : ''}
+                            </div>`;
+                    }
+                    const cat = sp.type === 'schedule' || sp.type === 'rss' ? 'local' : 'specials';
+                    if (!catSlides[cat]) catSlides[cat] = [];
+                    catSlides[cat].push(specialEl);
+                });
+
+                // ─── APPLY SLIDE PLAYLIST ORDER ───
+                const playlist = data.slide_playlist || [];
+                let orderedSlides;
+
+                if (playlist.length) {
+                    // Group collected slides by their category key
+                    orderedSlides = [];
+                    playlist.forEach(item => {
+                        if (!item.key && item.type !== 'logo' && item.type !== 'local') return;
+                        if (item.type === 'logo') {
+                            orderedSlides.push(...(catSlides['logo'] || []));
+                        } else if (item.type === 'team') {
+                            // key = "league_path:abbr" — match by full team key
+                            const path = item.key.slice(0, item.key.lastIndexOf(':'));
+                            const abbr = item.key.slice(item.key.lastIndexOf(':') + 1);
+                            (catSlides[path] || []).forEach(el => {
+                                if (el.dataset.slideKey && el.dataset.slideKey.includes(abbr)) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'driver') {
+                            const path = item.series || '';
+                            (catSlides[path] || []).forEach(el => {
+                                if (el.dataset.slideKey && el.dataset.slideKey.includes(item.name || '')) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'golfer') {
+                            (catSlides['golf/pga'] || []).forEach(el => {
+                                if (el.dataset.slideKey && el.dataset.slideKey.includes(item.name || '')) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'special') {
+                            (catSlides['specials'] || []).forEach(el => {
+                                // match by uid stored in slideKey or just add all in order
+                                if (el.dataset.slideKey && item.uid && el.dataset.slideKey.includes(item.uid)) {
+                                    orderedSlides.push(el);
+                                }
+                            });
+                        } else if (item.type === 'local') {
+                            orderedSlides.push(...(catSlides['local'] || []));
+                        }
+                    });
+                    // Append any slides not matched by playlist (fallback)
+                    const usedEls = new Set(orderedSlides);
+                    Object.values(catSlides).flat().forEach(el => {
+                        if (!usedEls.has(el)) orderedSlides.push(el);
+                    });
+                } else {
+                    // No playlist — use category order (logo first, then everything else)
+                    const orderedKeys = ['logo'];
+                    Object.keys(catSlides).forEach(k => { if (!orderedKeys.includes(k)) orderedKeys.push(k); });
+                    orderedSlides = [];
+                    orderedKeys.forEach(cat => { if (catSlides[cat]) orderedSlides.push(...catSlides[cat]); });
+                }
+
+                patchStage(orderedSlides);
+
+
+                // ─── BUILD TICKER ───
+                let tickerHtml = '';
+                (data.ticker_parts || []).forEach(section => {
+                    tickerHtml += `<span class="tick-item"><span class="tick-label">${section.label}</span></span>`;
+                    section.games.forEach((g, i) => {
+                        const flash = flashIds.has(`${g.away}@${g.home}`);
+                        const cls = flash ? 'flash-yellow' : g.color_state;
+                        let gameText;
+                        if (g.winner && g.winner !== 'tie' && (g.color_state === 'final' || g.color_state === 'live')) {
+                            const awayTag = g.winner === 'away'
+                                ? `<span style="font-weight:900">${g.away}</span>`
+                                : g.away;
+                            const homeTag = g.winner === 'home'
+                                ? `<span style="font-weight:900">${g.home}</span>`
+                                : g.home;
+                            if (g.color_state === 'final') {
+                                gameText = `${awayTag} ${g.away_score}  ${homeTag} ${g.home_score}  F`;
+                            } else {
+                                const statusMatch = g.text.match(/\([^)]+\)$/);
+                                gameText = `${awayTag} ${g.away_score}  ${homeTag} ${g.home_score}  ${statusMatch ? statusMatch[0] : ''}`;
+                            }
+                        } else {
+                            gameText = g.text;
+                        }
+                        tickerHtml += `<span class="tick-item ${cls}">${gameText}</span>`;
+                        if (i < section.games.length - 1) tickerHtml += `<span class="tick-sep">·</span>`;
+                    });
+                    tickerHtml += `<span class="tick-sep tick-sep">  ///  </span>`;
+                });
+
+
+                function isToday(isoStr) {
+                    if (!isoStr) return false;
+                    const d = new Date(isoStr);
+                    const now = new Date();
+                    return d.getFullYear() === now.getFullYear() &&
+                           d.getMonth() === now.getMonth() &&
+                           d.getDate() === now.getDate();
+                }
+                (data.local_schedule_items || []).filter(i => i.type === 'schedule' && isToday(i.event_iso)).forEach(item => {
+                    const dt = [item.date, item.time].filter(Boolean).join('   ');
+                    tickerHtml += `<span class="tick-item"><span class="tick-label">${item.label}</span>${item.away_team} @ ${item.home_team}${dt ? ' | ' + dt : ''}</span><span class="tick-sep">  ///  </span>`;
+                });
+                (data.local_schedule_items || []).filter(i => i.type === 'rss' && isToday(i.event_iso)).forEach(item => {
+                    const dt = [item.date, item.time].filter(Boolean).join('   ');
+                    tickerHtml += `<span class="tick-item"><span class="tick-label">${item.label}</span>${item.title}${dt ? ' | ' + dt : ''}</span><span class="tick-sep">  ///  </span>`;
+                });
+
+                if (tickerHtml && tickerHtml !== lastTickerHtml) {
+                    lastTickerHtml = tickerHtml;
+                    const ticker = document.getElementById('ticker-text');
+                    const isRunning = ticker.getAnimations().some(a => a.playState === 'running');
+                    ticker.innerHTML = tickerHtml;
+                    if (!isRunning) resetTickerAnimation();
+                }
+
+
+            } catch(e) { console.error('Data update error:', e); }
+        }
+
+
+
+
+        function resetTickerAnimation() {
+            const ticker = document.getElementById('ticker-text');
+            const PX_PER_SEC = 120;
+            ticker.style.animation = 'none';
+            ticker.offsetWidth; // force reflow so removing animation takes effect
+            const duration = ticker.scrollWidth / PX_PER_SEC;
+            ticker.style.animation = `scroll ${duration}s linear infinite`;
+        }
+
+
+        updateData();
+        setInterval(updateData, 30 * 1000);
+    </script>
+</body>
+</html>
