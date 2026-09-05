@@ -211,6 +211,8 @@ def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         if 'user' not in session:
+            if request.path.startswith('/api/'):
+                return jsonify({"error": "Unauthorized", "status": "unauthorized"}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapper
@@ -1746,10 +1748,14 @@ def wifi_scan():
     networks = []
     try:
         if tool == 'nmcli':
-            r = subprocess.run(
-                ['nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
-                 'device', 'wifi', 'list', '--rescan', 'yes'],
-                capture_output=True, text=True, timeout=20)
+            r = None
+            for prefix in ([], ['sudo']):
+                r = subprocess.run(
+                    prefix + ['nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
+                              'device', 'wifi', 'list', '--rescan', 'yes'],
+                    capture_output=True, text=True, timeout=20)
+                if r.returncode == 0 and r.stdout.strip():
+                    break
             for line in r.stdout.splitlines():
                 p = line.split(':')
                 if len(p) >= 4 and p[0].strip():
@@ -1912,15 +1918,41 @@ def wifi_disconnect():
         return jsonify({'ok': False, 'error': str(e)})
 
 
+def _kiosk_unit_installed():
+    return os.path.exists('/etc/systemd/system/kiosk.service') or os.path.exists('/lib/systemd/system/kiosk.service')
+
+
+def _kiosk_browser_running():
+    try:
+        r = subprocess.run(['pgrep', '-f', '--', '--kiosk'], capture_output=True, timeout=3)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _systemctl(args, timeout=15):
+    last = None
+    for prefix in ([], ['sudo']):
+        try:
+            last = subprocess.run(prefix + ['systemctl'] + args,
+                                  capture_output=True, text=True, timeout=timeout)
+            if last.returncode == 0:
+                return last
+        except Exception as e:
+            last = e
+    if isinstance(last, Exception):
+        raise last
+    return last
+
+
 @app.route('/api/kiosk/<action>', methods=['POST'])
 @login_required
 def kiosk_control(action):
     if action not in ('start', 'stop', 'restart'):
         return jsonify({"error": "Invalid action"}), 400
-    if not os.path.exists('/etc/systemd/system/kiosk.service'):
+    if not _kiosk_unit_installed():
         return jsonify({"error": "kiosk.service is not installed. Re-run install.sh and choose Kiosk or Combined mode."}), 404
     try:
-        # If starting and already active, restart instead to avoid a second instance
         if action == 'start':
             check = subprocess.run(
                 ['systemctl', 'is-active', 'kiosk.service'],
@@ -1928,13 +1960,10 @@ def kiosk_control(action):
             )
             if check.stdout.strip() == 'active':
                 action = 'restart'
-        result = subprocess.run(
-            ['sudo', 'systemctl', action, 'kiosk.service'],
-            capture_output=True, text=True, timeout=15,
-        )
+        result = _systemctl([action, 'kiosk.service'])
         if result.returncode == 0:
             return jsonify({"status": "ok", "action": action})
-        return jsonify({"error": result.stderr.strip() or "Command failed"}), 500
+        return jsonify({"error": (result.stderr or result.stdout or "Command failed").strip()}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1942,14 +1971,19 @@ def kiosk_control(action):
 @app.route('/api/kiosk/status', methods=['GET'])
 @login_required
 def kiosk_status():
-    if not os.path.exists('/etc/systemd/system/kiosk.service'):
+    if not _kiosk_unit_installed():
+        if _kiosk_browser_running():
+            return jsonify({"status": "active"})
         return jsonify({"status": "not-installed"})
     try:
         result = subprocess.run(
             ['systemctl', 'is-active', 'kiosk.service'],
             capture_output=True, text=True, timeout=5,
         )
-        return jsonify({"status": result.stdout.strip() or 'unknown'})
+        st = (result.stdout or '').strip() or 'unknown'
+        if st != 'active' and _kiosk_browser_running():
+            st = 'active'
+        return jsonify({"status": st})
     except Exception as e:
         return jsonify({"status": "unknown", "error": str(e)})
 

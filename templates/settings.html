@@ -2162,14 +2162,25 @@
 
     // ── Display / Kiosk controls ──
 
+    async function fetchJson(url, opts) {
+        const res = await fetch(url, opts);
+        const text = await res.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; }
+        catch (e) {
+            throw new Error(text.trim().startsWith('<') ? 'Not logged in — reload /settings' : 'Bad response from server');
+        }
+        if (res.status === 401) throw new Error(data.error || 'Not logged in — reload /settings');
+        return { res, data };
+    }
+
     async function displayAction(action) {
         const el = document.getElementById('display-status');
         el.textContent = action==='off' ? 'Sleeping display…' : 'Waking display…';
         try {
-            const res = await fetch(`/api/display/${action}`, { method:'POST' });
-            const data = await res.json();
+            const { data } = await fetchJson(`/api/display/${action}`, { method:'POST' });
             el.textContent = data.error ? `Error: ${data.error}` : (action==='off'?'Display sleeping.':'Display awake.');
-        } catch(e) { el.textContent = 'Request failed.'; }
+        } catch(e) { el.textContent = e.message || 'Request failed.'; }
     }
 
     async function restartBackend() {
@@ -2194,17 +2205,15 @@
         const msgEl = document.getElementById('kiosk-msg');
         msgEl.textContent = {restart:'Resetting kiosk…',stop:'Stopping kiosk…',start:'Starting kiosk…'}[action] || '…';
         try {
-            const res  = await fetch(`/api/kiosk/${action}`, { method:'POST' });
-            const data = await res.json();
+            const { data } = await fetchJson(`/api/kiosk/${action}`, { method:'POST' });
             if (data.error) { msgEl.textContent = `Error: ${data.error}`; }
             else { msgEl.textContent = {restart:'Kiosk reset.',stop:'Kiosk stopped.',start:'Kiosk started.'}[action]||'Done.'; setTimeout(pollKioskStatus,2000); }
-        } catch(e) { msgEl.textContent = 'Request failed.'; }
+        } catch(e) { msgEl.textContent = e.message || 'Request failed.'; }
     }
 
     async function pollKioskStatus() {
         try {
-            const res  = await fetch('/api/kiosk/status');
-            const data = await res.json();
+            const { res, data } = await fetchJson('/api/kiosk/status');
             const dot  = document.getElementById('kiosk-status-dot');
             const txt  = document.getElementById('kiosk-status-text');
             const msgEl = document.getElementById('kiosk-msg');
@@ -2214,6 +2223,10 @@
                 dot.style.background = '#444';
                 txt.style.color      = '#555';
                 if (!msgEl.textContent) msgEl.textContent = 'kiosk.service not found — re-run install.sh in Kiosk or Combined mode.';
+            } else if (s === 'unauthorized' || res.status === 401) {
+                txt.textContent      = 'LOGIN REQUIRED';
+                dot.style.background = '#FFD600';
+                txt.style.color      = '#FFD600';
             } else {
                 txt.textContent      = s.toUpperCase();
                 dot.style.background = s==='active'?'#00E676':s==='inactive'?'#FF1744':'#FFD600';
@@ -2397,8 +2410,7 @@
         btn.textContent = 'SCANNING…';
         list.innerHTML = '<p style="color:#555;font-family:\'Barlow\',sans-serif;font-size:14px;padding:12px 14px;margin:0;">Scanning for networks…</p>';
         try {
-            const res = await fetch('/api/wifi/scan');
-            const d = await res.json();
+            const { data: d } = await fetchJson('/api/wifi/scan');
             if (d.error && !d.networks.length) {
                 list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">${d.error}</p>`;
             } else if (!d.networks.length) {

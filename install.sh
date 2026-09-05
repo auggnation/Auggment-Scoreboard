@@ -623,15 +623,16 @@ cat > /etc/sudoers.d/scoreboard <<EOF
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH start kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH stop kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH restart kiosk.service
-# Wi-Fi management (nmcli)
-$APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH device wifi list *
-$APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH device wifi connect *
-$APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH device disconnect *
-# Wi-Fi scan (iw / iwlist)
-$APP_USER ALL=(ALL) NOPASSWD: $IWLIST_PATH * scan
-$APP_USER ALL=(ALL) NOPASSWD: $IW_PATH dev * scan
-$APP_USER ALL=(ALL) NOPASSWD: $IW_PATH dev * info
-# wpa_cli — allow all subcommands (connect, disconnect, list_networks, etc.)
+$APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start kiosk.service
+$APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop kiosk.service
+$APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kiosk.service
+$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl start kiosk.service
+$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl stop kiosk.service
+$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart kiosk.service
+# Wi-Fi management
+$APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH
+$APP_USER ALL=(ALL) NOPASSWD: $IWLIST_PATH
+$APP_USER ALL=(ALL) NOPASSWD: $IW_PATH
 $APP_USER ALL=(ALL) NOPASSWD: $WPA_CLI_PATH
 EOF
 chmod 440 /etc/sudoers.d/scoreboard
