@@ -86,4 +86,4 @@ exec "$BROWSER" \
     --confirm-to-quit \
     $CHROME_GEOMETRY \
     --user-data-dir="$HOME/.config/browser-kiosk" \
-    "http://localhost:${PORT}"
+    "http://localhost:${PORT}/?v=$(cat "$_APP_DIR/version.txt" 2>/dev/null || echo 1.0.8)"

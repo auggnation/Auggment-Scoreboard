@@ -571,6 +571,7 @@ body.pg-index header {
     border-bottom: max(1px, calc(3 * var(--px))) solid var(--border);
     flex-shrink: 0;
     box-sizing: border-box;
+    position: relative;
 }
 body.pg-index header.hidden { opacity: 0; pointer-events: none; }
 
@@ -591,11 +592,18 @@ body.pg-index header.hidden { opacity: 0; pointer-events: none; }
     font-weight: 300;
     color: var(--gold);
     opacity: 0.5;
+    display: none;
 }
 #top-clock {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 50%;
+    margin-top: calc(-1 * (0.5em));
     font-size: 6vh;
     font-weight: 900;
     color: var(--gold);
+    white-space: nowrap;
 }
 #weather {
     font-size: 5vh;

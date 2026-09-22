@@ -605,7 +605,7 @@ exec $BROWSER_EXEC \\
     \$CHROME_GEOMETRY \\
     --user-data-dir=/home/$APP_USER/.config/browser-kiosk \\
     $EXTRA_BROWSER_FLAGS \\
-    http://localhost:\$DISPLAY_PORT
+    "http://localhost:\$DISPLAY_PORT/?v=\$(cat "\$APP_DIR/version.txt" 2>/dev/null || echo 1.0.8)"
 EOF
     chmod +x "$APP_DIR/start_kiosk.sh"
     echo "Written: $APP_DIR/start_kiosk.sh"

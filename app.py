@@ -1,6 +1,6 @@
 import os, json, requests, subprocess, pytz, threading, time as time_module, uuid, random, string
 import zipfile, io, shutil, tempfile
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, make_response
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from dateutil import parser as dateutil_parser
@@ -761,11 +761,14 @@ WEATHER_EMOJI = {
 }
 
 
+WEATHER_CACHE = [None]
+
+
 def get_weather(city):
-    try:
+    def _try():
         res = requests.get(f"https://wttr.in/{city}?format=j1", timeout=4)
         if res.status_code != 200:
-            return "--"
+            return None
         data = res.json()
         cc = data['current_condition'][0]
         temp = f"{cc['temp_F']}°F"
@@ -774,8 +777,16 @@ def get_weather(city):
         except (TypeError, ValueError):
             emoji = ''
         return f"{emoji} {temp}".strip() if emoji else temp
+    try:
+        val = _try()
+        if val:
+            WEATHER_CACHE[0] = val
+            return val
     except Exception:
-        return "--"
+        pass
+    if WEATHER_CACHE[0]:
+        return WEATHER_CACHE[0]
+    return "--"
 
 
 def _special_active_today(sp, tz_str):
@@ -1504,7 +1515,10 @@ def index():
     settings = get_settings()
     if settings.get('device_mode') == 'server' and not settings.get('server_enable_display', True):
         return redirect(url_for('settings_page'))
-    return render_template('index.html')
+    resp = make_response(render_template('index.html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 
 @app.route('/login', methods=['GET', 'POST'])
