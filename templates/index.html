@@ -357,11 +357,14 @@
                             <div class="card ${stateClass} ${doFlash ? 'flash' : ''}" id="card-${key.replace(/[^a-z0-9]/gi,'_')}">
                                 ${stateClass === 'final' ? '<div class="final-badge">F</div>' : ''}
                                 <div class="league-tag">${t.league_label}</div>
+                                ${statusContent}
                                 <div class="teams-grid">
                                     <div class="team-block away ${awayWinClass}">
                                         <img src="${t.away_logo}" class="team-logo${t.away_is_fav ? ' fav-team-logo' : ''}" onerror="this.style.display='none'">
                                         <span class="team-abbr ${awayFavCls}">${t.away_name}</span>
-                                        <span class="team-score-v ${stateClass} ${awayWinClass} ${awayScoreFavCls}">${t.away_score}</span>
+                                        ${t.is_pre && t.away_record
+                                            ? `<span class="team-record ${awayFavCls}">${t.away_record}</span>`
+                                            : `<span class="team-score-v ${stateClass} ${awayWinClass} ${awayScoreFavCls}">${t.away_score}</span>`}
                                     </div>
                                     <div class="center-col">
                                         ${centerContent}
@@ -370,14 +373,15 @@
                                     <div class="team-block home ${homeWinClass}">
                                         <img src="${t.home_logo}" class="team-logo${t.home_is_fav ? ' fav-team-logo' : ''}" onerror="this.style.display='none'">
                                         <span class="team-abbr ${homeFavCls}">${t.home_name}</span>
-                                        <span class="team-score-v ${stateClass} ${homeWinClass} ${homeScoreFavCls}">${t.home_score}</span>
+                                        ${t.is_pre && t.home_record
+                                            ? `<span class="team-record ${homeFavCls}">${t.home_record}</span>`
+                                            : `<span class="team-score-v ${stateClass} ${homeWinClass} ${homeScoreFavCls}">${t.home_score}</span>`}
                                     </div>
                                 </div>
                                 <div class="v-event">
                                     <span class="v-event-league">${t.league_label}</span>
                                     <span class="v-event-time ${stateClass}">${vLiveDot}${vEventTime}</span>
                                 </div>
-                                ${statusContent}
                             </div>
                         </div>
                     `);
@@ -492,16 +496,16 @@
                         specialEl.innerHTML = `
                             <div class="card pre">
                                 <div class="league-tag">${sp.label}</div>
+                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
                                 <div class="teams-grid">
-                                    <div class="team-block away"><span class="team-abbr">${sp.away_team}</span></div>
+                                    <div class="team-block away"><span class="team-abbr">${sp.away_team}</span>${sp.away_record ? `<span class="team-record">${sp.away_record}</span>` : ''}</div>
                                     <div class="center-col"><div class="score-display pre vs-label">VS</div></div>
-                                    <div class="team-block home"><span class="team-abbr">${sp.home_team}</span></div>
+                                    <div class="team-block home"><span class="team-abbr">${sp.home_team}</span>${sp.home_record ? `<span class="team-record">${sp.home_record}</span>` : ''}</div>
                                 </div>
                                 <div class="v-event">
                                     <span class="v-event-league">${sp.label}</span>
                                     ${dt ? `<span class="v-event-time pre">${dt}</span>` : ''}
                                 </div>
-                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
                             </div>`;
                     } else if (sp.type === 'rss') {
                         const dt = [sp.date, sp.time].filter(Boolean).join('  ·  ');
@@ -509,6 +513,7 @@
                         specialEl.innerHTML = `
                             <div class="card pre rss-card">
                                 <div class="league-tag">${sp.tag || 'CUSTOM'}</div>
+                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
                                 <div class="rss-body">
                                     <div class="rss-logo-col">${logoHtml}<div class="rss-label">${sp.label}</div></div>
                                     <div class="rss-text-col">
@@ -517,7 +522,6 @@
                                     </div>
                                 </div>
                                 ${dt ? `<div class="v-event"><span class="v-event-time pre">${dt}</span></div>` : ''}
-                                ${dt ? `<div class="status-bar pre">${dt}</div>` : ''}
                             </div>`;
                     } else if (sp.type === 'image' && sp.image) {
                         specialEl.innerHTML = `

@@ -746,6 +746,15 @@ body.pg-index.light .team-logo {
     color: var(--team-abbr-color);
 }
 
+.team-record {
+    font-size: 4vw;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    color: var(--team-abbr-color);
+    opacity: 0.85;
+}
+
 .center-col {
     display: flex;
     flex-direction: column;

@@ -606,7 +606,14 @@ def _fetch_league_raw(path, league_conferences, days_back=0, days_ahead=14):
         return f"groups={conf_id}" if conf_id else ''
 
     def _to_events(resp):
-        return resp.json().get('events', []) if resp.ok else []
+        if not resp.ok:
+            return []
+        try:
+            raw = resp.json().get('events', [])
+        except Exception:
+            raw = []
+        return [e for e in raw
+                if isinstance(e, dict) and e.get('competitions') and e.get('id')]
 
     events = []
     if path in ESPN_NO_DATE_LEAGUES:
@@ -615,28 +622,39 @@ def _fetch_league_raw(path, league_conferences, days_back=0, days_ahead=14):
         if qs:
             url += f"?{qs}"
         events = _to_events(requests.get(url, timeout=8))
+        if not events and qs:
+            events = _to_events(requests.get(base_url, timeout=8))
     else:
         # ESPN's hyphenated dates=START-END range now returns HTTP 400 ("Failed
         # to get events endpoint"), so fetch each day separately and merge.
         # This also lets the date window widen beyond ESPN's default slate.
-        seen = set()
-        with requests.Session() as s:
-            day = start
-            while day <= end:
-                url = f"{base_url}?dates={day.strftime('%Y%m%d')}"
-                qs = _groups_param()
-                if qs:
-                    url += f"&{qs}"
-                try:
-                    resp = s.get(url, timeout=8)
-                except requests.RequestException:
+        def _fetch_range(with_groups):
+            fetched = []
+            seen = set()
+            with requests.Session() as s:
+                day = start
+                while day <= end:
+                    url = f"{base_url}?dates={day.strftime('%Y%m%d')}"
+                    qs = _groups_param() if with_groups else ''
+                    if qs:
+                        url += f"&{qs}"
+                    try:
+                        resp = s.get(url, timeout=8)
+                    except requests.RequestException:
+                        day += timedelta(days=1)
+                        continue
+                    for e in _to_events(resp):
+                        if e.get('id') not in seen:
+                            seen.add(e.get('id'))
+                            fetched.append(e)
                     day += timedelta(days=1)
-                    continue
-                for e in _to_events(resp):
-                    if e.get('id') not in seen:
-                        seen.add(e.get('id'))
-                        events.append(e)
-                day += timedelta(days=1)
+            return fetched
+
+        events = _fetch_range(True)
+        if not events and _groups_param():
+            # A stale/empty conference group filter can make ESPN return nothing
+            # (or stray empty events); fall back to the unfiltered slate.
+            events = _fetch_range(False)
 
     # Fall back to NASCAR.com live feed if ESPN has no data
     if not events and path == 'racing/nascar-cup':
@@ -779,6 +797,40 @@ def _special_active_today(sp, tz_str):
     return True
 
 
+def _espn_record(comp):
+    """Pull a team's W-L record from an ESPN scoreboard competitor.
+
+    ESPN exposes `competitor['records']` as a list like
+    [{"name": "overall", "abbreviation": "3-0", "summary": "3-0"}, ...].
+    Prefer the overall record; fall back to any field whose summary is a
+    W-L (or W-L-T) string."""
+    try:
+        for rec in comp.get('records', []) or []:
+            if not isinstance(rec, dict):
+                continue
+            if (rec.get('name') or '').lower() == 'overall':
+                summ = (rec.get('summary') or '').strip()
+                if summ and re.fullmatch(r'\d{1,2}-\d{1,2}(?:-\d{1,2})?', summ):
+                    return summ
+        for rec in comp.get('records', []) or []:
+            summ = (rec.get('summary') or '').strip()
+            if summ and re.fullmatch(r'\d{1,2}-\d{1,2}(?:-\d{1,2})?', summ):
+                return summ
+    except Exception:
+        pass
+    return ''
+
+
+def _split_record(team):
+    """Split a trailing record off a team label, e.g. 'Auburn (3-1)' ->
+    ('Auburn', '3-1'). Returns (team, record); record is '' when not given."""
+    team = (team or '').strip()
+    m = re.search(r'\s*\((\d{1,2}-\d{1,2}(?:-\d{1,2})?)\)\s*$', team)
+    if m:
+        return team[:m.start()].strip(), m.group(1)
+    return team, ''
+
+
 def _build_local_schedule_items(settings, tz_str):
     items = []
     ls = settings.get('local_schedule', {})
@@ -794,11 +846,15 @@ def _build_local_schedule_items(settings, tz_str):
                 event_iso = parsed.isoformat()
             except Exception:
                 pass
+        away_team, away_record = _split_record(entry.get('away_team', ''))
+        home_team, home_record = _split_record(entry.get('home_team', ''))
         items.append({
             'type': 'schedule',
             'label': entry.get('label', 'LOCAL SPORTS'),
-            'away_team': entry.get('away_team', ''),
-            'home_team': entry.get('home_team', ''),
+            'away_team': away_team,
+            'home_team': home_team,
+            'away_record': away_record,
+            'home_record': home_record,
             'date': date_raw,
             'time': time_raw,
             'location': entry.get('location', ''),
@@ -1330,7 +1386,10 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
 
             for event in events:
                 try:
-                    comp = event['competitions'][0]
+                    comp_list = event.get('competitions') or []
+                    if not comp_list or not comp_list[0].get('competitors'):
+                        continue
+                    comp = comp_list[0]
                     competitors = comp['competitors']
                     home = next((c for c in competitors if c.get('homeAway') == 'home'), competitors[0])
                     away = next((c for c in competitors if c.get('homeAway') == 'away'), competitors[-1])
@@ -1396,6 +1455,8 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
                             "status": status_detail, "local_time": l_time_str,
                             "is_pre": state == 'pre', "color_state": color_state,
                             "winner": winner,
+                            "away_record": (_espn_record(away) if state == 'pre' else ''),
+                            "home_record": (_espn_record(home) if state == 'pre' else ''),
                             "away_is_fav": away_is_fav,
                             "home_is_fav": home_is_fav,
                         })
@@ -1722,15 +1783,22 @@ def backend_restart():
 # ─── WIFI MANAGEMENT ───
 
 def _wifi_tool():
-    """Returns ('nmcli'|'iw'|'iwlist', iface) or (None, None)."""
-    # Try nmcli first (NetworkManager)
+    """Returns ('nmcli'|'iw'|'iwlist'|'wpa', iface) or (None, None).
+
+    NetworkManager is only used when it actually manages the wireless device.
+    Interfaces bound by an external wpa_supplicant / dhcpcd show as 'unmanaged'
+    in nmcli and yield empty scans, so those fall through to iw/iwlist/wpa_cli.
+    """
+    # Try nmcli first, but only for devices NetworkManager manages
     try:
-        r = subprocess.run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device'],
+        r = subprocess.run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE', 'device'],
                            capture_output=True, text=True, timeout=5)
         for line in r.stdout.splitlines():
             p = line.split(':')
             if len(p) >= 2 and p[1] == 'wifi':
-                return 'nmcli', p[0]
+                if len(p) < 3 or p[2] != 'unmanaged':
+                    return 'nmcli', p[0]
+                break
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     # Find wireless interface
@@ -1744,7 +1812,8 @@ def _wifi_tool():
         pass
     if not iface:
         return None, None
-    # Prefer iw over iwlist
+    # Prefer iwscan results (root needed) — wpa_cli is the reliable fallback for
+    # supplicant-owned interfaces; iw/iwlist are still tried first.
     for cmd in ('iw', 'iwlist'):
         try:
             subprocess.run([cmd, '--version'], capture_output=True, timeout=2)
@@ -1920,6 +1989,35 @@ def _parse_iwlist_scan(text):
     return nets
 
 
+def _parse_wpa_scan(text):
+    """Parse `wpa_cli -i <iface> scan_results` output (tab-separated)."""
+    nets = []
+    for line in text.splitlines():
+        p = line.split('\t')
+        if len(p) < 4 or ':' not in p[0][:5]:
+            continue
+        sig_str = p[2].strip()
+        flags = p[3]
+        ssid = p[4].strip() if len(p) > 4 else ''
+        if not ssid:
+            continue
+        try:
+            dbm = float(sig_str)
+            if abs(dbm) > 200:
+                dbm = dbm / 100.0
+            sig = max(0, min(100, int(dbm + 110)))
+        except Exception:
+            sig = 0
+        if 'WPA2' in flags:
+            sec = 'WPA2'
+        elif 'WPA' in flags:
+            sec = 'WPA'
+        else:
+            sec = 'Open'
+        nets.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+    return nets
+
+
 @app.route('/api/wifi/scan')
 @login_required
 def wifi_scan():
@@ -1968,6 +2066,17 @@ def wifi_scan():
                 errors.append('iwlist scan failed (is the wireless interface up?)')
             else:
                 networks = _parse_iwlist_scan(r.stdout)
+        elif tool == 'wpa':
+            # Dedicated wpa_supplicant (interface unmanaged by NM): scan via its
+            # control socket. Requires NOPASSWD sudoers entry for wpa_cli.
+            _ensure_iface_up(iface)
+            _run(['wpa_cli', '-i', iface, 'scan'], timeout=15)
+            time_module.sleep(3)
+            r = _run(['wpa_cli', '-i', iface, 'scan_results'], timeout=15)
+            if r is None or r.returncode != 0:
+                errors.append('wpa_cli scan failed (is the wireless interface up?)')
+            else:
+                networks = _parse_wpa_scan(r.stdout)
         else:
             return jsonify({'networks': [], 'error': 'No scan tool available (install iw or network-manager)'})
     except Exception as e:

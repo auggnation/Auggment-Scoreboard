@@ -17,10 +17,40 @@ if [ -z "$BROWSER" ] || [ ! -x "$BROWSER" ]; then
     exit 1
 fi
 
-# Port: kiosk.json present => kiosk mode (5001); otherwise server/combined (5000)
+# Port: settings.json (when present) is authoritative — it is what app.py
+# actually binds. Fallback: kiosk.json present => kiosk mode (5001), else 5000.
 _APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT=5000
 [ -f "$_APP_DIR/kiosk.json" ] && PORT=5001
+if command -v python3 >/dev/null 2>&1 && [ -f "$_APP_DIR/settings.json" ]; then
+    SPORT=$(python3 - "$_APP_DIR/settings.json" <<'PYEOF' 2>/dev/null
+import json, sys
+try: print(json.load(open(sys.argv[1])).get('port', ''))
+except Exception: pass
+PYEOF
+)
+    case "$SPORT" in
+        ''|*[!0-9]*) ;;
+        *) [ "$SPORT" -gt 0 ] 2>/dev/null && PORT="$SPORT" ;;
+    esac
+fi
+echo "Kiosk will open http://localhost:${PORT}"
+
+# Chrome's --kiosk can fail to go fullscreen on WM-less X11 (Chrome >= 152),
+# leaving a default-sized window. Force the exact active-resolution geometry.
+CHROME_GEOMETRY=""
+if command -v xrandr >/dev/null 2>&1; then
+    GEO=$(xrandr --current 2>/dev/null | awk '/\*/{print $1; exit}')
+    if [ -n "$GEO" ]; then
+        W=${GEO%x*}
+        H=${GEO#*x}
+        case "$W:$H" in
+            *[!0-9]*:*[!0-9]*) ;;
+            *) [ "$W" -gt 0 ] 2>/dev/null && [ "$H" -gt 0 ] 2>/dev/null \
+                && CHROME_GEOMETRY="--window-size=${W},${H} --window-position=0,0" ;;
+        esac
+    fi
+fi
 
 # Kill any existing kiosk browser so we get a clean single instance
 pkill -f "chrom.*--kiosk" 2>/dev/null || true
@@ -45,6 +75,7 @@ done
 # "existing browser session" and exits prematurely.
 exec "$BROWSER" \
     --kiosk \
+    --start-fullscreen \
     --no-first-run \
     --disable-infobars \
     --disable-session-crashed-bubble \
@@ -53,5 +84,6 @@ exec "$BROWSER" \
     --disable-translate \
     --check-for-update-interval=31536000 \
     --confirm-to-quit \
+    $CHROME_GEOMETRY \
     --user-data-dir="$HOME/.config/browser-kiosk" \
     "http://localhost:${PORT}"

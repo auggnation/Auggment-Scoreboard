@@ -542,6 +542,38 @@ EOF
 pkill -f "${BROWSER_BIN}.*--kiosk" 2>/dev/null || true
 sleep 2
 
+# Prefer the port app.py actually binds (settings.json) when present, so the
+# browser always lands on the same port the backend serves, whatever mode that is.
+_APP_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+if command -v python3 >/dev/null 2>&1 && [ -f "\$_APP_DIR/settings.json" ]; then
+    SPORT=\$(python3 - "\$_APP_DIR/settings.json" <<'PYEOF' 2>/dev/null
+import json, sys
+try: print(json.load(open(sys.argv[1])).get('port', ''))
+except Exception: pass
+PYEOF
+)
+    case "\$SPORT" in
+        ''|*[!0-9]*) ;;
+        *) [ "\$SPORT" -gt 0 ] 2>/dev/null && DISPLAY_PORT="\$SPORT" ;;
+    esac
+fi
+
+# Chrome's --kiosk can fail to go fullscreen on WM-less X11 (Chrome >= 152),
+# leaving a default-sized window. Force the exact active-resolution geometry.
+CHROME_GEOMETRY=""
+if command -v xrandr >/dev/null 2>&1; then
+    GEO=\$(xrandr --current 2>/dev/null | awk '/\*/{print \$1; exit}')
+    if [ -n "\$GEO" ]; then
+        W=\${GEO%x*}
+        H=\${GEO#*x}
+        case "\$W:\$H" in
+            *[!0-9]*:*[!0-9]*) ;;
+            *) [ "\$W" -gt 0 ] 2>/dev/null && [ "\$H" -gt 0 ] 2>/dev/null \\
+                && CHROME_GEOMETRY="--window-size=\${W},\${H} --window-position=0,0" ;;
+        esac
+    fi
+fi
+
 xset s off
 xset -dpms
 xset s noblank
@@ -550,7 +582,7 @@ pkill unclutter 2>/dev/null || true
 unclutter -idle 0 &
 
 _tries=0
-until curl -sf http://localhost:$DISPLAY_PORT > /dev/null 2>&1; do
+until curl -sf http://localhost:\$DISPLAY_PORT > /dev/null 2>&1; do
     sleep 1
     _tries=\$((_tries+1))
     [ \$_tries -ge 60 ] && break
@@ -561,6 +593,7 @@ done
 # invocation never detects an "existing browser session" and exits early.
 exec $BROWSER_EXEC \\
     --kiosk \\
+    --start-fullscreen \\
     --no-first-run \\
     --disable-infobars \\
     --disable-session-crashed-bubble \\
@@ -569,9 +602,10 @@ exec $BROWSER_EXEC \\
     --disable-translate \\
     --check-for-update-interval=31536000 \\
     --confirm-to-quit \\
+    \$CHROME_GEOMETRY \\
     --user-data-dir=/home/$APP_USER/.config/browser-kiosk \\
     $EXTRA_BROWSER_FLAGS \\
-    http://localhost:$DISPLAY_PORT
+    http://localhost:\$DISPLAY_PORT
 EOF
     chmod +x "$APP_DIR/start_kiosk.sh"
     echo "Written: $APP_DIR/start_kiosk.sh"
