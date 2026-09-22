@@ -38,17 +38,41 @@ os.makedirs(RSS_LOGOS_FOLDER, exist_ok=True)
 
 LEAGUE_LABELS = {
     "football/nfl": "NFL",
+    "football/cfl": "CFL",
+    "football/xfl": "XFL",
     "baseball/mlb": "MLB",
     "basketball/nba": "NBA",
     "basketball/wnba": "WNBA",
+    "basketball/euroleague": "EuroLeague",
     "hockey/nhl": "NHL",
+    "hockey/mens-college-hockey": "NCAA Hockey",
     "soccer/usa.1": "MLS",
     "soccer/usa.nwsl": "NWSL",
     "soccer/eng.1": "EPL",
     "soccer/eng.2": "EFL Champ",
+    "soccer/eng.3": "League One",
+    "soccer/eng.4": "League Two",
     "soccer/esp.1": "La Liga",
+    "soccer/esp.2": "La Liga 2",
     "soccer/ger.1": "Bundesliga",
+    "soccer/ger.2": "2. Bundesliga",
+    "soccer/ita.1": "Serie A",
+    "soccer/ita.2": "Serie B",
+    "soccer/fra.1": "Ligue 1",
+    "soccer/fra.2": "Ligue 2",
+    "soccer/ned.1": "Eredivisie",
+    "soccer/por.1": "Liga Portugal",
+    "soccer/sco.1": "Scottish Prem",
+    "soccer/mex.1": "Liga MX",
+    "soccer/bra.1": "Brasileirão",
+    "soccer/arg.1": "LPF Argentina",
+    "soccer/tur.1": "Süper Lig",
+    "soccer/gre.1": "Greek Super Lg",
+    "soccer/uefa.champions": "UEFA UCL",
+    "soccer/uefa.europa": "Europa League",
+    "soccer/uefa.europa.conf": "Conf. League",
     "soccer/fifa.world": "World Cup",
+    "soccer/fifa.worldq": "WC Qualifiers",
     "soccer/fifa.wwc": "Women's WC",
     "football/college-football": "CFB",
     "basketball/mens-college-basketball": "CBK",
@@ -56,12 +80,16 @@ LEAGUE_LABELS = {
     "baseball/college-baseball": "CBB",
     "softball/college-softball": "CSB",
     "volleyball/womens-college-volleyball": "CVB",
+    "volleyball/mens-college-volleyball": "NCAA MensVB",
+    "lacrosse/mens-college-lacrosse": "NCAA MensLAX",
+    "lacrosse/womens-college-lacrosse": "NCAA WomensLAX",
     "soccer/usa.usl.1": "USL Champ",
     "soccer/usa.usl.l1": "USL L1",
     "baseball/milb": "MiLB",
     "lacrosse/pll": "PLL",
     "lacrosse/nll": "NLL",
     "cricket/current": "Cricket",
+    "cricket/8039": "BBL",
     "cricket/8048": "IPL",
     "cricket/8052": "County",
     "cricket/8623": "CPL",
@@ -82,17 +110,41 @@ LEAGUE_LABELS = {
 
 ESPN_API_PATHS = {
     "football/nfl": ("football", "nfl"),
+    "football/cfl": ("football", "cfl"),
+    "football/xfl": ("football", "xfl"),
     "baseball/mlb": ("baseball", "mlb"),
     "basketball/nba": ("basketball", "nba"),
     "basketball/wnba": ("basketball", "wnba"),
+    "basketball/euroleague": ("basketball", "euroleague"),
     "hockey/nhl": ("hockey", "nhl"),
+    "hockey/mens-college-hockey": ("hockey", "mens-college-hockey"),
     "soccer/usa.1": ("soccer", "usa.1"),
     "soccer/usa.nwsl": ("soccer", "usa.nwsl"),
     "soccer/eng.1": ("soccer", "eng.1"),
     "soccer/eng.2": ("soccer", "eng.2"),
+    "soccer/eng.3": ("soccer", "eng.3"),
+    "soccer/eng.4": ("soccer", "eng.4"),
     "soccer/esp.1": ("soccer", "esp.1"),
+    "soccer/esp.2": ("soccer", "esp.2"),
     "soccer/ger.1": ("soccer", "ger.1"),
+    "soccer/ger.2": ("soccer", "ger.2"),
+    "soccer/ita.1": ("soccer", "ita.1"),
+    "soccer/ita.2": ("soccer", "ita.2"),
+    "soccer/fra.1": ("soccer", "fra.1"),
+    "soccer/fra.2": ("soccer", "fra.2"),
+    "soccer/ned.1": ("soccer", "ned.1"),
+    "soccer/por.1": ("soccer", "por.1"),
+    "soccer/sco.1": ("soccer", "sco.1"),
+    "soccer/mex.1": ("soccer", "mex.1"),
+    "soccer/bra.1": ("soccer", "bra.1"),
+    "soccer/arg.1": ("soccer", "arg.1"),
+    "soccer/tur.1": ("soccer", "tur.1"),
+    "soccer/gre.1": ("soccer", "gre.1"),
+    "soccer/uefa.champions": ("soccer", "uefa.champions"),
+    "soccer/uefa.europa": ("soccer", "uefa.europa"),
+    "soccer/uefa.europa.conf": ("soccer", "uefa.europa.conf"),
     "soccer/fifa.world": ("soccer", "fifa.world"),
+    "soccer/fifa.worldq": ("soccer", "fifa.worldq"),
     "soccer/fifa.wwc": ("soccer", "fifa.wwc"),
     "football/college-football": ("football", "college-football"),
     "basketball/mens-college-basketball": ("basketball", "mens-college-basketball"),
@@ -100,12 +152,16 @@ ESPN_API_PATHS = {
     "baseball/college-baseball": ("baseball", "college-baseball"),
     "softball/college-softball": ("baseball", "college-softball"),
     "volleyball/womens-college-volleyball": ("volleyball", "womens-college-volleyball"),
+    "volleyball/mens-college-volleyball": ("volleyball", "mens-college-volleyball"),
+    "lacrosse/mens-college-lacrosse": ("lacrosse", "mens-college-lacrosse"),
+    "lacrosse/womens-college-lacrosse": ("lacrosse", "womens-college-lacrosse"),
     "soccer/usa.usl.1": ("soccer", "usa.usl.1"),
     "soccer/usa.usl.l1": ("soccer", "usa.usl.l1"),
     "baseball/milb": ("baseball", "milb"),
     "lacrosse/pll": ("lacrosse", "pll"),
     "lacrosse/nll": ("lacrosse", "nll"),
     "cricket/current": ("cricket", "current"),
+    "cricket/8039": ("cricket", "8039"),
     "cricket/8048": ("cricket", "8048"),
     "cricket/8052": ("cricket", "8052"),
     "cricket/8623": ("cricket", "8623"),
@@ -127,7 +183,10 @@ ESPN_API_PATHS = {
 ESPN_WEB_API_LEAGUES = {"softball/college-softball"}
 ESPN_NO_DATE_LEAGUES = {
     "baseball/college-baseball", "softball/college-softball",
-    "cricket/current", "cricket/8048", "cricket/8052", "cricket/8623", "cricket/8604",
+    "volleyball/mens-college-volleyball",
+    "hockey/mens-college-hockey",
+    "lacrosse/mens-college-lacrosse", "lacrosse/womens-college-lacrosse",
+    "cricket/current", "cricket/8039", "cricket/8048", "cricket/8052", "cricket/8623", "cricket/8604",
 }
 MOTORSPORTS_LEAGUES = {"racing/nascar-cup", "racing/irl", "racing/f1"}
 MOTORSPORTS_FAV_KEY = {
@@ -538,18 +597,46 @@ def _fetch_league_raw(path, league_conferences, days_back=0, days_ahead=14):
     now = datetime.now()
     start = now - timedelta(days=days_back)
     end = now + timedelta(days=max(days_ahead, 1))
-    date_str = f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}"
     base_host = "site.web.api.espn.com" if path in ESPN_WEB_API_LEAGUES else "site.api.espn.com"
+    base_url = f"https://{base_host}/apis/site/v2/sports/{sport}/{league}/scoreboard"
+
+    def _groups_param():
+        conf_val = league_conferences.get(path, '')
+        conf_id = ','.join(conf_val) if isinstance(conf_val, list) else conf_val
+        return f"groups={conf_id}" if conf_id else ''
+
+    def _to_events(resp):
+        return resp.json().get('events', []) if resp.ok else []
+
+    events = []
     if path in ESPN_NO_DATE_LEAGUES:
-        url = f"https://{base_host}/apis/site/v2/sports/{sport}/{league}/scoreboard"
+        url = base_url
+        qs = _groups_param()
+        if qs:
+            url += f"?{qs}"
+        events = _to_events(requests.get(url, timeout=8))
     else:
-        url = f"https://{base_host}/apis/site/v2/sports/{sport}/{league}/scoreboard?dates={date_str}"
-    conf_val = league_conferences.get(path, '')
-    conf_id = ','.join(conf_val) if isinstance(conf_val, list) else conf_val
-    if conf_id:
-        url += f"{'?' if '?' not in url else '&'}groups={conf_id}"
-    r = requests.get(url, timeout=8)
-    events = r.json().get('events', []) if r.ok else []
+        # ESPN's hyphenated dates=START-END range now returns HTTP 400 ("Failed
+        # to get events endpoint"), so fetch each day separately and merge.
+        # This also lets the date window widen beyond ESPN's default slate.
+        seen = set()
+        with requests.Session() as s:
+            day = start
+            while day <= end:
+                url = f"{base_url}?dates={day.strftime('%Y%m%d')}"
+                qs = _groups_param()
+                if qs:
+                    url += f"&{qs}"
+                try:
+                    resp = s.get(url, timeout=8)
+                except requests.RequestException:
+                    day += timedelta(days=1)
+                    continue
+                for e in _to_events(resp):
+                    if e.get('id') not in seen:
+                        seen.add(e.get('id'))
+                        events.append(e)
+                day += timedelta(days=1)
 
     # Fall back to NASCAR.com live feed if ESPN has no data
     if not events and path == 'racing/nascar-cup':
@@ -1739,6 +1826,100 @@ def wifi_status():
     return jsonify(info)
 
 
+# Run a command, retrying with sudo when it fails without privileges.
+def _run(cmd, timeout=20):
+    last = None
+    for prefix in ([], ['sudo']):
+        try:
+            r = subprocess.run(prefix + cmd, capture_output=True, text=True, timeout=timeout)
+            if r.returncode == 0:
+                return r
+            last = r
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            last = None
+    return last
+
+
+def _ensure_iface_up(iface):
+    """Bring the interface up before scanning (iw/iwlist need it up)."""
+    try:
+        with open(f'/sys/class/net/{iface}/operstate') as f:
+            if f.read().strip() == 'up':
+                return
+    except Exception:
+        pass
+    _run(['ip', 'link', 'set', iface, 'up'], timeout=10)
+
+
+def _parse_nm_list(text):
+    """Parse `nmcli -t -f SSID,SIGNAL,SECURITY,ACTIVE device wifi list` output.
+    Parsing from the right keeps SSIDs containing colons intact."""
+    nets = []
+    for line in text.splitlines():
+        p = line.split(':')
+        if len(p) < 4:
+            continue
+        active = p[-1].strip()
+        security = p[-2].strip()
+        try:
+            sig = int(p[-3].strip())
+        except ValueError:
+            sig = 0
+        ssid = ':'.join(p[:-3]).strip()
+        if ssid:
+            nets.append({'ssid': ssid, 'signal': sig,
+                         'security': security or 'Open', 'active': active == 'yes'})
+    return nets
+
+
+def _parse_iw_scan(text):
+    nets = []
+    entry = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith('BSS '):
+            if entry.get('ssid'):
+                nets.append(entry)
+            entry = {'ssid': '', 'signal': 0, 'security': 'Open', 'active': False}
+        elif line.startswith('SSID:'):
+            entry['ssid'] = line[5:].strip()
+        elif line.startswith('signal:'):
+            try:
+                dbm = float(line.split(':')[1].split()[0])
+                entry['signal'] = max(0, min(100, int(dbm + 110)))
+            except Exception:
+                pass
+        elif 'RSN:' in line or 'WPA:' in line:
+            entry['security'] = 'WPA2' if 'RSN' in line else 'WPA'
+    if entry.get('ssid'):
+        nets.append(entry)
+    return nets
+
+
+def _parse_iwlist_scan(text):
+    nets = []
+    ssid, sig, sec = '', 0, 'Open'
+    for line in text.splitlines():
+        line = line.strip()
+        if 'ESSID:' in line:
+            ssid = line.split('ESSID:')[1].strip().strip('"')
+        elif 'Signal level=' in line:
+            try:
+                sig_str = line.split('Signal level=')[1].split(' ')[0]
+                sig_val = int(sig_str.split('/')[0])
+                sig = sig_val + 100 if sig_val < 0 else sig_val
+            except Exception:
+                sig = 0
+        elif 'Encryption key:' in line:
+            sec = 'WPA' if 'on' in line else 'Open'
+        elif 'Extra:' in line and ssid:
+            nets.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+            ssid, sig, sec = '', 0, 'Open'
+    if ssid:
+        nets.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+    return nets
+
+
 @app.route('/api/wifi/scan')
 @login_required
 def wifi_scan():
@@ -1746,69 +1927,47 @@ def wifi_scan():
     if not iface:
         return jsonify({'networks': [], 'error': 'No wireless interface found'})
     networks = []
+    errors = []
     try:
         if tool == 'nmcli':
-            r = None
-            for prefix in ([], ['sudo']):
-                r = subprocess.run(
-                    prefix + ['nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
-                              'device', 'wifi', 'list', '--rescan', 'yes'],
-                    capture_output=True, text=True, timeout=20)
-                if r.returncode == 0 and r.stdout.strip():
+            # Make sure NetworkManager manages the device, then force a scan.
+            # --rescan yes can return empty before the scan completes, so retry
+            # a few times and fall back to a plain (non-rescan) list.
+            _run(['nmcli', 'device', 'set', iface, 'managed', 'yes'], timeout=10)
+            ok = False
+            for _ in range(4):
+                r = _run(['nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
+                          'device', 'wifi', 'list', '--rescan', 'yes'], timeout=25)
+                if r is None:
+                    errors.append('nmcli unavailable')
                     break
-            for line in r.stdout.splitlines():
-                p = line.split(':')
-                if len(p) >= 4 and p[0].strip():
-                    try:
-                        sig = int(p[1])
-                    except ValueError:
-                        sig = 0
-                    networks.append({'ssid': p[0], 'signal': sig,
-                                     'security': p[2] or 'Open', 'active': p[3] == 'yes'})
+                networks = _parse_nm_list(r.stdout)
+                if networks:
+                    ok = True
+                    break
+                time_module.sleep(2)
+                r2 = _run(['nmcli', '--escape', 'no', '-t', '-f', 'SSID,SIGNAL,SECURITY,ACTIVE',
+                           'device', 'wifi', 'list'], timeout=15)
+                networks = _parse_nm_list(r2.stdout if r2 else '')
+                if networks:
+                    ok = True
+                    break
+            if not ok and not errors:
+                errors.append('nmcli returned no networks — is Wi-Fi switched on?')
         elif tool == 'iw':
-            r = subprocess.run(['sudo', 'iw', 'dev', iface, 'scan'],
-                               capture_output=True, text=True, timeout=20)
-            entry = {}
-            for line in r.stdout.splitlines():
-                line = line.strip()
-                if line.startswith('BSS '):
-                    if entry.get('ssid'):
-                        networks.append(entry)
-                    entry = {'ssid': '', 'signal': 0, 'security': 'Open', 'active': False}
-                elif line.startswith('SSID:'):
-                    entry['ssid'] = line[5:].strip()
-                elif line.startswith('signal:'):
-                    try:
-                        dbm = float(line.split(':')[1].split()[0])
-                        entry['signal'] = max(0, min(100, int(dbm + 110)))
-                    except Exception:
-                        pass
-                elif 'RSN:' in line or 'WPA:' in line:
-                    entry['security'] = 'WPA2' if 'RSN' in line else 'WPA'
-            if entry.get('ssid'):
-                networks.append(entry)
+            _ensure_iface_up(iface)
+            r = _run(['iw', 'dev', iface, 'scan'], timeout=25)
+            if r is None:
+                errors.append('iw scan failed (is the wireless interface up?)')
+            else:
+                networks = _parse_iw_scan(r.stdout)
         elif tool == 'iwlist':
-            r = subprocess.run(['sudo', 'iwlist', iface, 'scan'],
-                               capture_output=True, text=True, timeout=15)
-            ssid, sig, sec = '', 0, 'Open'
-            for line in r.stdout.splitlines():
-                line = line.strip()
-                if 'ESSID:' in line:
-                    ssid = line.split('ESSID:')[1].strip().strip('"')
-                elif 'Signal level=' in line:
-                    try:
-                        sig_str = line.split('Signal level=')[1].split(' ')[0]
-                        sig_val = int(sig_str.split('/')[0])
-                        sig = sig_val + 100 if sig_val < 0 else sig_val
-                    except Exception:
-                        sig = 0
-                elif 'Encryption key:' in line:
-                    sec = 'WPA' if 'on' in line else 'Open'
-                elif 'Extra:' in line and ssid:
-                    networks.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
-                    ssid, sig, sec = '', 0, 'Open'
-            if ssid:
-                networks.append({'ssid': ssid, 'signal': sig, 'security': sec, 'active': False})
+            _ensure_iface_up(iface)
+            r = _run(['iwlist', iface, 'scan'], timeout=20)
+            if r is None:
+                errors.append('iwlist scan failed (is the wireless interface up?)')
+            else:
+                networks = _parse_iwlist_scan(r.stdout)
         else:
             return jsonify({'networks': [], 'error': 'No scan tool available (install iw or network-manager)'})
     except Exception as e:
@@ -1820,7 +1979,10 @@ def wifi_scan():
         if n['ssid'] not in seen:
             seen.add(n['ssid'])
             unique.append(n)
-    return jsonify({'networks': unique})
+    out = {'networks': unique}
+    if errors:
+        out['error'] = '; '.join(errors)
+    return jsonify(out)
 
 
 @app.route('/api/wifi/connect', methods=['POST'])
@@ -1839,7 +2001,9 @@ def wifi_connect():
             cmd = ['nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', iface]
             if password:
                 cmd += ['password', password]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            r = _run(cmd, timeout=30)
+            if r is None:
+                return jsonify({'ok': False, 'error': 'nmcli connect failed (is the interface available?)'})
             ok = r.returncode == 0
             msg = (r.stdout.strip() or r.stderr.strip()).splitlines()[0] if (r.stdout or r.stderr) else ''
             return jsonify({'ok': ok, 'message': msg})
@@ -1888,8 +2052,9 @@ def wifi_disconnect():
         return jsonify({'ok': False, 'error': 'No wireless interface found'})
     try:
         if tool == 'nmcli':
-            r = subprocess.run(['nmcli', 'device', 'disconnect', iface],
-                               capture_output=True, text=True, timeout=10)
+            r = _run(['nmcli', 'device', 'disconnect', iface], timeout=10)
+            if r is None:
+                return jsonify({'ok': False, 'error': 'nmcli disconnect failed'})
             return jsonify({'ok': r.returncode == 0, 'message': r.stdout.strip() or r.stderr.strip()})
 
         # wpa_cli fallback: disconnect + disable all networks to prevent auto-reconnect
@@ -1963,6 +2128,14 @@ def kiosk_control(action):
         result = _systemctl([action, 'kiosk.service'])
         if result.returncode == 0:
             return jsonify({"status": "ok", "action": action})
+        if action in ('restart', 'start'):
+            # Fallback: force-kill any kiosk browser; systemd's Restart=always
+            # (or an explicit start) will bring it back up.
+            subprocess.run(['pkill', '-f', '--', '--kiosk'], capture_output=True, timeout=5)
+            time_module.sleep(1)
+            result2 = _systemctl(['start', 'kiosk.service'])
+            if result2.returncode == 0:
+                return jsonify({"status": "ok", "action": action, "fallback": True})
         return jsonify({"error": (result.stderr or result.stdout or "Command failed").strip()}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500

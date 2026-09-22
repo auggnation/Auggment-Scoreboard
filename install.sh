@@ -618,6 +618,7 @@ NMCLI_PATH=$(command -v nmcli 2>/dev/null || echo /usr/bin/nmcli)
 IWLIST_PATH=$(command -v iwlist 2>/dev/null || echo /usr/sbin/iwlist)
 IW_PATH=$(command -v iw 2>/dev/null || echo /usr/sbin/iw)
 WPA_CLI_PATH=$(command -v wpa_cli 2>/dev/null || echo /usr/sbin/wpa_cli)
+IP_PATH=$(command -v ip 2>/dev/null || echo /usr/sbin/ip)
 cat > /etc/sudoers.d/scoreboard <<EOF
 # Scoreboard service control
 $APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH start kiosk.service
@@ -629,11 +630,12 @@ $APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl start kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl stop kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart kiosk.service
-# Wi-Fi management
+# Wi-Fi management (incl. bringing interfaces up for scanning)
 $APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH
 $APP_USER ALL=(ALL) NOPASSWD: $IWLIST_PATH
 $APP_USER ALL=(ALL) NOPASSWD: $IW_PATH
 $APP_USER ALL=(ALL) NOPASSWD: $WPA_CLI_PATH
+$APP_USER ALL=(ALL) NOPASSWD: $IP_PATH link set *
 EOF
 chmod 440 /etc/sudoers.d/scoreboard
 visudo -c -f /etc/sudoers.d/scoreboard && echo "Written: /etc/sudoers.d/scoreboard" \
