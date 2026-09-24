@@ -796,6 +796,15 @@ body.pg-index.light .team-logo {
 .score-part.win  { color: var(--winner-color); }
 .score-part.loss { color: var(--loser-color); }
 .score-part.tie  { color: var(--tie-color); }
+
+/* Winning team stands out more than the losing side (matches ticker bold) */
+.team-block.win { font-weight: 950; }
+.team-block.win .team-abbr {
+    font-size: calc(8vw * 1.1);
+    font-weight: 950;
+}
+.team-block.win .team-score-v { font-size: calc(3.4vw * 1.1); }
+.score-part.win { font-size: calc(16vw * 1.06); font-weight: 950; }
 /* Favorite team name and score */
 .fav-team-abbr  { color: var(--fav-abbr-color)  !important; }
 .fav-team-score { color: var(--fav-score-color); }
