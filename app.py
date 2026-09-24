@@ -376,6 +376,7 @@ def get_settings():
         },
         "slide_duration": 8,
         "slide_transition": "slide-right",
+        "ticker_speed": 120,
         "date_windows": {},
     }
     if not os.path.exists(SETTINGS_FILE):
@@ -1101,7 +1102,7 @@ def _parse_maxpreps_feed(url, label, logo, out, tz_str='America/Chicago'):
         min_dt = tz.localize(datetime(now_local.year, now_local.month, now_local.day)) - timedelta(days=1)
     else:
         min_dt = tz.localize(datetime(now_local.year, now_local.month, now_local.day))
-    max_dt = min_dt + timedelta(days=3)
+    max_dt = min_dt + timedelta(days=31)
 
     headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     res = requests.get(url, timeout=10, headers=headers)
@@ -1111,6 +1112,47 @@ def _parse_maxpreps_feed(url, label, logo, out, tz_str='America/Chicago'):
         return
     data = json.loads(m.group(1))
     contests = data.get('props', {}).get('pageProps', {}).get('initSchoolContests', [])
+
+    # JSON-LD fallback (game-day cards also present on the events page)
+    if not contests:
+        try:
+            jm = re.search(r'<script type="application/ld\+json"[^>]*>({.*?})</script', res.text, re.S)
+            if jm:
+                jld = json.loads(jm.group(1))
+                graph = jld.get('@graph', [jld])
+                for n in graph:
+                    evts = n.get('event') or []
+                    if isinstance(evts, dict):
+                        evts = [evts]
+                    for ev in evts:
+                        title = (ev.get('name') or '').strip()
+                        if not title:
+                            continue
+                        start = (ev.get('startDate') or ev.get('start_date') or '').strip()
+                        date_str = time_str = ''
+                        event_dt = None
+                        if start:
+                            try:
+                                event_dt = dateutil_parser.parse(start)
+                                if event_dt.tzinfo is None:
+                                    event_dt = tz.localize(event_dt)
+                                else:
+                                    event_dt = event_dt.astimezone(tz)
+                                if event_dt < min_dt:
+                                    continue
+                                date_str = event_dt.strftime('%a %b %-d')
+                                time_str = event_dt.strftime('%-I:%M %p')
+                            except Exception:
+                                pass
+                        out.append({'type': 'rss', 'label': label, 'logo': logo,
+                                    'title': title,
+                                    'body': (ev.get('@type') or 'Sporting Event').replace('_', ' '),
+                                    'date': date_str, 'time': time_str,
+                                    'event_iso': event_dt.isoformat() if event_dt else ''})
+        except Exception:
+            pass
+        return
+
     count = 0
     for c in contests:
         title = (c.get('title') or '').strip()
@@ -1502,6 +1544,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
         "slide_playlist": settings.get('slide_playlist', []),
         "slide_duration": settings.get('slide_duration', 8),
         "slide_transition": settings.get('slide_transition', 'slide-right'),
+        "ticker_speed": settings.get('ticker_speed', 120),
         "cache_updated_at": _espn_cache.get("updated_at"),
         "settings_updated_at": settings.get('last_saved', ''),
         "app_version": _read_version(),
@@ -1736,8 +1779,26 @@ def resolve_feed_api():
     try:
         resolved, feed_type = _resolve_feed(url)
         labels = {'rss': 'RSS feed', 'ical': 'iCal calendar', 'thrillshare': 'Thrillshare calendar', 'maxpreps': 'MaxPreps schedule'}
+        count = 0
+        sample = ''
+        if feed_type:
+            probe = []
+            tz_str = get_settings().get('timezone', 'America/Chicago')
+            if feed_type == 'thrillshare':
+                _parse_thrillshare_feed(resolved, 'PROBE', '', probe, tz_str)
+            elif feed_type == 'maxpreps':
+                _parse_maxpreps_feed(resolved, 'PROBE', '', probe, tz_str)
+            elif feed_type == 'rss':
+                _parse_rss_feed(resolved, 'PROBE', '', probe)
+            elif feed_type == 'ical':
+                _parse_ical_feed(resolved, 'PROBE', '', probe, tz_str)
+            count = len(probe)
+            if probe:
+                sample = probe[0].get('title', '')
         return jsonify({"resolved_url": resolved, "feed_type": feed_type,
-                        "feed_type_label": labels.get(feed_type, 'Unknown'), "ok": feed_type is not None})
+                        "feed_type_label": labels.get(feed_type, 'Unknown'),
+                        "event_count": count, "sample_title": sample,
+                        "ok": feed_type is not None})
     except Exception as e:
         return jsonify({"error": str(e), "ok": False}), 500
 

@@ -242,6 +242,13 @@
                 <div class="color-item"><label>Final Game Items</label><input type="color" id="color_ticker_final" value="#FF1744"></div>
                 <div class="color-item"><label>Separator ( · ///)</label><input type="color" id="color_ticker_sep" value="#444444"></div>
             </div>
+            <div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap;">
+                <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Ticker Speed</label>
+                <input type="range" id="ticker_speed" min="30" max="400" step="5"
+                       style="flex:1;min-width:200px;accent-color:var(--accent);"
+                       oninput="document.getElementById('ticker_speed_val').textContent = this.value + ' px/s'">
+                <span id="ticker_speed_val" style="font-size:16px;color:#ccc;font-family:'Barlow Condensed',sans-serif;min-width:70px;text-align:right;">120 px/s</span>
+            </div>
         </div>
 
         <div style="margin-top:22px;">
@@ -1661,7 +1668,9 @@
                     if (data.ok) {
                         rssFeeds[idx].url = data.resolved_url;
                         urlInput.value = data.resolved_url;
-                        detectStatus.textContent = `✓ Detected: ${data.feed_type_label || data.feed_type}`;
+                        const n = (data.event_count != null) ? ` (${data.event_count} event${data.event_count === 1 ? '' : 's'} found)` : '';
+                        detectStatus.textContent = `✓ Detected: ${data.feed_type_label || data.feed_type}${n}`;
+                        detectStatus.title = data.sample_title || '';
                         detectStatus.style.color = '#00E676';
                     } else {
                         detectStatus.textContent = data.error || 'Could not detect a feed at this URL.';
@@ -1843,6 +1852,10 @@
         document.getElementById('slide_duration').value = currentSettings.slide_duration || 8;
         setTransition(currentSettings.slide_transition || 'slide-right');
 
+        const tickerSpeed = currentSettings.ticker_speed || 120;
+        document.getElementById('ticker_speed').value = tickerSpeed;
+        document.getElementById('ticker_speed_val').textContent = tickerSpeed + ' px/s';
+
         savedDateWindows = currentSettings.date_windows || {};
 
         syncPlaylist();
@@ -1949,6 +1962,7 @@
             slide_playlist: slidePlaylist,
             slide_duration: parseInt(document.getElementById('slide_duration').value) || 8,
             slide_transition: document.querySelector('.trans-btn.active')?.dataset.val || 'slide-right',
+            ticker_speed: parseInt(document.getElementById('ticker_speed').value) || 120,
             date_windows: (() => {
                 const date_windows = {};
                 document.querySelectorAll('#event-windows-grid input[data-league]').forEach(inp => {

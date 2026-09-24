@@ -133,6 +133,11 @@
         let settingsVersion = null;
         let appVersion = null;
 
+        // Ticker: pixel-driven marquee so speed stays constant regardless of
+        // how much content is in the bar (CSS % animations drift as width changes).
+        let tickerSpeed = 120;
+        let tickerOffset = 0;
+
 
         function buildScoreText(awayScore, homeScore) {
             return `${awayScore}-${homeScore}`;
@@ -271,6 +276,12 @@
                 // Apply theme and orientation from settings
                 document.body.classList.toggle('light', data.theme === 'light');
                 applyOrientation(data.cast_orientation || 'auto');
+
+                // Ticker speed (px/sec) — constant regardless of content width
+                const newTickerSpeed = parseInt(data.ticker_speed, 10);
+                if (newTickerSpeed > 0 && newTickerSpeed !== tickerSpeed) {
+                    tickerSpeed = newTickerSpeed;
+                }
 
 
                 // ─── BUILD SLIDES ───
@@ -660,9 +671,10 @@
                 if (tickerHtml && tickerHtml !== lastTickerHtml) {
                     lastTickerHtml = tickerHtml;
                     const ticker = document.getElementById('ticker-text');
-                    const isRunning = ticker.getAnimations().some(a => a.playState === 'running');
                     ticker.innerHTML = tickerHtml;
-                    if (!isRunning) resetTickerAnimation();
+                    // Content changed — preserve current scroll position and keep
+                    // the same pixel-per-second speed for the new width.
+                    resetTickerAnimation(true);
                 }
 
 
@@ -672,18 +684,39 @@
 
 
 
+        // Pixel-driven ticker: constant px/sec no matter the content width.
+        let tickerTotal = 0;      // scrollWidth of the ticker (one full loop)
+        let tickerLoopRAF = null;
+        let tickerLoopLast = 0;
+
         function resetTickerAnimation() {
             const ticker = document.getElementById('ticker-text');
-            const PX_PER_SEC = 120;
-            ticker.style.animation = 'none';
-            ticker.offsetWidth; // force reflow so removing animation takes effect
-            const duration = ticker.scrollWidth / PX_PER_SEC;
-            ticker.style.animation = `scroll ${duration}s linear infinite`;
+            if (!ticker) return;
+            tickerTotal = ticker.scrollWidth || 0;
+            if (tickerTotal > 0) tickerOffset = tickerOffset % tickerTotal;
+            if (!tickerLoopRAF) {
+                tickerLoopLast = 0;
+                tickerLoopRAF = requestAnimationFrame(tickerLoop);
+            }
+        }
+
+        function tickerLoop(ts) {
+            tickerLoopRAF = requestAnimationFrame(tickerLoop);
+            const ticker = document.getElementById('ticker-text');
+            if (!ticker || tickerTotal <= 0) return;
+            if (!tickerLoopLast) tickerLoopLast = ts;
+            let dt = (ts - tickerLoopLast) / 1000;
+            tickerLoopLast = ts;
+            if (dt > 2) dt = 2; // hold position if tab was hidden
+            tickerOffset += tickerSpeed * dt;
+            if (tickerOffset >= tickerTotal) tickerOffset %= tickerTotal;
+            ticker.style.transform = `translateX(${-tickerOffset}px)`;
         }
 
 
         updateData();
         setInterval(updateData, 30 * 1000);
+        resetTickerAnimation(); // animate initial "LOADING..." text
     </script>
 </body>
 </html>

@@ -159,6 +159,14 @@ echo "--- Installing System Packages ---"
 case "$DISTRO_FAMILY" in
     debian)
         apt-get update -q
+        # Apache2 ships on many distro images and squats on port 80, which
+        # otherwise surfaces as a confusing "Apache2 Default Page" on kiosk
+        # displays and to visitors — this app serves its own HTTP backend.
+        if systemctl is-active --quiet apache2 2>/dev/null; then
+            echo "Disabling Apache2 (scoreboard serves its own HTTP) ..."
+            systemctl disable --now apache2 || true
+            apt-get remove -y --purge apache2 apache2-bin apache2-data apache2-utils 2>/dev/null || true
+        fi
         # Python backend — all modes
         apt-get install -y \
             python3 \
@@ -263,11 +271,14 @@ if [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]]; then
         case "$DISTRO_FAMILY" in
             debian)
                 # Older distros ship chromium-browser; newer ones ship chromium.
-                if apt-cache show chromium-browser >/dev/null 2>&1; then
+                if apt-cache policy chromium 2>/dev/null | grep -q "^  Candidate: [0-9]"; then
+                    echo "Installing chromium via apt..."
+                    apt-get install -y chromium
+                    BROWSER_BIN="chromium"
+                elif apt-cache policy chromium-browser 2>/dev/null | grep -q "^  Candidate: [0-9]"; then
                     echo "Installing chromium-browser via apt..."
                     apt-get install -y chromium-browser
                     BROWSER_BIN="chromium-browser"
-                elif apt-cache show chromium >/dev/null 2>&1; then
                     echo "Installing chromium via apt..."
                     apt-get install -y chromium
                     BROWSER_BIN="chromium"
@@ -545,6 +556,8 @@ sleep 2
 # Prefer the port app.py actually binds (settings.json) when present, so the
 # browser always lands on the same port the backend serves, whatever mode that is.
 _APP_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+: "\${DISPLAY_PORT:=5000}"
+[ -f "\$_APP_DIR/kiosk.json" ] && DISPLAY_PORT=5001
 if command -v python3 >/dev/null 2>&1 && [ -f "\$_APP_DIR/settings.json" ]; then
     SPORT=\$(python3 - "\$_APP_DIR/settings.json" <<'PYEOF' 2>/dev/null
 import json, sys
@@ -605,7 +618,7 @@ exec $BROWSER_EXEC \\
     \$CHROME_GEOMETRY \\
     --user-data-dir=/home/$APP_USER/.config/browser-kiosk \\
     $EXTRA_BROWSER_FLAGS \\
-    "http://localhost:\$DISPLAY_PORT/?v=\$(cat "\$APP_DIR/version.txt" 2>/dev/null || echo 1.0.8)"
+    "http://localhost:\$DISPLAY_PORT/?v=\$(cat "\$APP_DIR/version.txt" 2>/dev/null || echo 1.0.9)"
 EOF
     chmod +x "$APP_DIR/start_kiosk.sh"
     echo "Written: $APP_DIR/start_kiosk.sh"
