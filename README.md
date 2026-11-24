@@ -2,6 +2,20 @@
 
 ![Scoreboard](Images/Scoreboard1.png)
 
+## What's New in 1.5
+
+Version 1.5 is about doing far less work for the same screen: the scoreboard now asks ESPN only when there is something new to learn, and it remembers what it learned.
+
+* **Smart polling** — scores are only polled while a game is in progress or about to start. A game that is days away costs nothing between schedule checks. See [Smart Polling & Offline Mode](#smart-polling--offline-mode).
+* **Schedule checks a few times a day** — game times are re-verified just after midnight, then at 6 AM, noon and 5 PM (midnight and noon only, when nothing you follow starts within 24 hours), so a rescheduled game is still caught.
+* **Offline mode** — league schedules, team lists and colors, local school schedules, weather and your favorite teams' logos are saved to disk (`cache/`). A restart or an internet outage keeps showing the last known data instead of a blank screen.
+* **Far fewer API calls** — a live score update is one request for today instead of one per day of the look-ahead window; local school feeds and weather are no longer re-fetched on every 30-second kiosk refresh; failures back off instead of retrying constantly.
+* **Fixes** — leagues requested by a kiosk keep refreshing (they used to freeze after the first load); an HTTP 4xx from ESPN (e.g. an off-season series) is treated as "no data" rather than an outage.
+* **New setting** — `live_favorites_only` (in `settings.json`) so only games involving your favorite teams wake the live poller.
+* **Packaging** — a new `smartcache.py` module ships alongside `app.py` (installer, update package and release zip all include it).
+
+Upgrading from 1.3 needs no changes to your settings; the cache builds itself on first run.
+
 ## What This Is
 
 Auggmented Scoreboard turns any spare TV into a live, always-on sports ticker for the games you actually care about. Point it at a TV in the kitchen, the garage, the man cave, a break room, a sports bar, a gym, or a church fellowship hall — anywhere people glance up wanting to know the score right now instead of waiting for it.
@@ -18,6 +32,7 @@ It pulls real-time scores from ESPN for the major pro and college leagues, plus 
 * **Kiosk/Server Architecture** — Run one central Server that pulls all the data, and pair as many Kiosk displays (TVs) to it as you want. Each kiosk shares the same live data but can have its own name, colors, orientation, and theme.
 * **Fully Customizable Look** — Pick a dark or light theme, a display font, and a color for nearly every element on screen (scores, team names, ticker, racing leaderboards, card backgrounds) from the Settings page — no code required.
 * **Smart Automation** — Scheduled display on/off times, automatic Wi-Fi management, and self-updating from GitHub releases or a local update package.
+* **Quiet on the Network** — Polls ESPN only around game time, checks for changed start times a few times a day, and keeps an offline copy of schedules, teams and favorite logos. Details in [Smart Polling & Offline Mode](#smart-polling--offline-mode).
 
 ## Smart Polling & Offline Mode
 
@@ -47,7 +62,7 @@ Start with a fresh install of Raspberry Pi OS or Ubuntu/Debian.
 
 **2. Download Files**
 
-Place `app.py`, `install.sh`, `version.txt`, `requirements.txt`, and the `templates/` and `static/` folders together in a directory (e.g. `/home/pi/scoreboard`).
+Place `app.py`, `smartcache.py`, `install.sh`, `version.txt`, `requirements.txt`, and the `templates/` and `static/` folders together in a directory (e.g. `/home/pi/scoreboard`).
 
 **3. Run the Installer**
 
@@ -112,6 +127,9 @@ sudo journalctl -u scoreboard.service -f
 
 # Stop the service
 sudo systemctl stop scoreboard.service
+
+# Reset the offline cache (rebuilds automatically)
+sudo rm -rf <install-dir>/cache && sudo systemctl restart scoreboard.service
 ```
 
 On Kiosk/Combined installs, the browser itself is managed separately:
@@ -135,7 +153,7 @@ On the Server's Settings page, generate a one-time "Pairing Code" (valid for 10 
 
 ### Local Schedules
 
-Go to Settings → Local Schedule and paste the URL of your school's or league's athletics page (or a MaxPreps link). The app automatically detects the feed type (Thrillshare, MaxPreps, iCal, or RSS) and pulls in upcoming games.
+Go to Settings → Local Schedule and paste the URL of your school's or league's athletics page (or a MaxPreps link). The app automatically detects the feed type (Thrillshare, MaxPreps, iCal, or RSS) and pulls in upcoming games. Feeds are re-read every 3 hours (school schedules rarely change); if the site is down the last good copy keeps showing.
 
 ### Display Control
 
@@ -146,7 +164,8 @@ The app uses `xset` to control the TV over DPMS/HDMI-CEC for the scheduled "Powe
 * **Apache2 "It Works!" Default Page Instead of the Scoreboard** — That page belongs to Apache2, not this app. The scoreboard listens on port `5000` (Server/Combined) or `5001` (Kiosk), not port 80 — browse to `http://<device-ip>:5000/` instead of the bare IP. If Apache2 isn't needed on that machine, remove it with `sudo systemctl disable --now apache2 && sudo apt purge -y apache2`.
 * **Black Screen on Boot** — Check `systemctl status kiosk.service`. Make sure graphics drivers are installed if it can't open the display.
 * **Unstyled / Broken-Looking Page** — Confirm `static/css/main.css` exists under the install directory; re-run `install.sh` if it's missing.
-* **Data Not Updating** — Check backend logs with `journalctl -u scoreboard -f` and verify the machine has internet access to reach ESPN's APIs.
+* **Data Not Updating** — Check backend logs with `journalctl -u scoreboard -f` and verify the machine has internet access to reach ESPN's APIs. Remember that 1.5 deliberately does not poll games that are days away: open `/api/cache/status` (logged in as admin) to see each league's last fetch, failure count, and whether it is currently being polled live. While offline the last known schedule keeps displaying, and the app retries with growing delays (up to 15 minutes).
+* **Stale or Wrong Schedule After a Change** — Press **FORCE REFRESH** on the Settings page, or delete the `cache/` folder next to `app.py` and restart the service; it rebuilds itself on the next load.
 * **Sudo Errors** — The app needs specific `NOPASSWD` entries in `/etc/sudoers.d/scoreboard` to control the display and services from the web UI. These are created automatically by the installer.
 
 ## Screenshots
