@@ -405,6 +405,7 @@ echo "--- Copying Application Files ---"
 
 # Main application source
 copy_if_exists "$SCRIPT_DIR/app.py" "$APP_DIR/app.py" || true
+copy_if_exists "$SCRIPT_DIR/smartcache.py" "$APP_DIR/smartcache.py" || true
 
 # Templates
 for tmpl in index.html login.html settings.html; do
@@ -767,6 +768,7 @@ echo "  User     : $APP_USER"
 echo ""
 
 REQUIRED_FILES="$APP_DIR/app.py
+$APP_DIR/smartcache.py
 $APP_DIR/templates/index.html
 $APP_DIR/templates/login.html
 $APP_DIR/templates/settings.html

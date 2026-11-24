@@ -3,6 +3,9 @@ settings.json
 kiosk.json
 paired_kiosks.json
 
+# Offline cache (schedules, teams, feeds, weather, favourite logos)
+cache/
+
 # User-uploaded media (logos, special-slide images, RSS logos)
 static/uploads/
 

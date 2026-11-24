@@ -19,6 +19,18 @@ It pulls real-time scores from ESPN for the major pro and college leagues, plus 
 * **Fully Customizable Look** — Pick a dark or light theme, a display font, and a color for nearly every element on screen (scores, team names, ticker, racing leaderboards, card backgrounds) from the Settings page — no code required.
 * **Smart Automation** — Scheduled display on/off times, automatic Wi-Fi management, and self-updating from GitHub releases or a local update package.
 
+## Smart Polling & Offline Mode
+
+The scoreboard is deliberately quiet on the network. It only talks to ESPN when there is something to learn:
+
+* **Schedule checks** — the whole date window is re-read a few times a day (just after midnight, then 6 AM, noon and 5 PM) to catch changed game times. When nothing you follow starts within 24 hours it drops to just midnight and noon.
+* **Live polling** — a league is polled for scores only while one of its games is in progress or about to start (from 5 minutes before kickoff), and only for *today's* slate — one request instead of one per day of the window. A game that is days away costs nothing between schedule checks.
+* **Slow sports** — PGA and cricket poll every few minutes, not every 30 seconds.
+* **Failures back off** (30 s → 15 min) and a dead connection stops after the first failed request instead of timing out repeatedly.
+* **Everything is cached on disk** in `cache/` next to `app.py`: league schedules, team lists and colors (7 days), local school/league feeds (3 hours), weather (30 minutes), and the logos of your favorite teams. After a restart or with the internet down, the last known schedule, teams and logos still display.
+
+Set `"live_favorites_only": true` in `settings.json` to have only games involving your favorite teams wake the live poller. `GET /api/cache/status` (admin) shows what each league is doing and when it will next poll.
+
 ## Requirements
 
 * **Operating System**
