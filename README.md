@@ -34,6 +34,10 @@ It pulls real-time scores from ESPN for the major pro and college leagues, plus 
 * **Smart Automation** — Scheduled display on/off times, automatic Wi-Fi management, and self-updating from GitHub releases or a local update package.
 * **Quiet on the Network** — Polls ESPN only around game time, checks for changed start times a few times a day, and keeps an offline copy of schedules, teams and favorite logos. Details in [Smart Polling & Offline Mode](#smart-polling--offline-mode).
 
+| Live and final scores — your team's result is highlighted | Upcoming games show the start time |
+|---|---|
+| ![A final college basketball score with the winner highlighted](Images/scoreboard4.png) | ![An upcoming MLS game card with kickoff time](Images/scoreboard%202.png) |
+
 ## Smart Polling & Offline Mode
 
 The scoreboard is deliberately quiet on the network. It only talks to ESPN when there is something to learn:
@@ -154,6 +158,18 @@ On the Server's Settings page, generate a one-time "Pairing Code" (valid for 10 
 ### Local Schedules
 
 Go to Settings → Local Schedule and paste the URL of your school's or league's athletics page (or a MaxPreps link). The app automatically detects the feed type (Thrillshare, MaxPreps, iCal, or RSS) and pulls in upcoming games. Feeds are re-read every 3 hours (school schedules rarely change); if the site is down the last good copy keeps showing.
+
+![A local high school baseball game shown next to the pro and college scores](Images/scoreboard%203.png)
+
+### Make It Yours
+
+Every color, the font and the light/dark theme are set from the Settings page, and the app can pick a palette automatically from your favorite team. The same game card can look completely different on each display, and every league uses the same layout, from the pros down to USL League One.
+
+| Default look | A custom red theme |
+|---|---|
+| ![USL League One game card in the default orange and lime theme](Images/scoreboard6.png) | ![USL League One game card in a custom red theme](Images/scoreboard7.png) |
+
+Beyond games, you can add your own full-screen "special" slides (a logo, an announcement, a sponsor) that rotate in with the scores, like the one at the top of this page.
 
 ### Display Control
 
