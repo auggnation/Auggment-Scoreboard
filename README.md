@@ -168,6 +168,10 @@ The app uses `xset` to control the TV over DPMS/HDMI-CEC for the scheduled "Powe
 * **Stale or Wrong Schedule After a Change** — Press **FORCE REFRESH** on the Settings page, or delete the `cache/` folder next to `app.py` and restart the service; it rebuilds itself on the next load.
 * **Sudo Errors** — The app needs specific `NOPASSWD` entries in `/etc/sudoers.d/scoreboard` to control the display and services from the web UI. These are created automatically by the installer.
 
+## How This Was Made
+
+I write this project myself and use [Claude Code](https://claude.com/claude-code), Anthropic's AI coding assistant, to help build it and to review and double-check my work. I mention it plainly because you should know how the software you run was made. Every change is mine to own, so if something is broken, open an issue or send a pull request.
+
 ## Screenshots
 
 | | |
