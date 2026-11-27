@@ -382,6 +382,16 @@ _DEFAULT_COLORS = {
 }
 
 
+def _is_kiosk_install():
+    """True when kiosk.json names a server. The file alone proves nothing: the app itself
+    creates an empty one (to hold its id) on servers too."""
+    try:
+        with open(KIOSK_CONFIG_FILE) as f:
+            return bool(json.load(f).get('server_url', '').strip())
+    except Exception:
+        return False
+
+
 def get_settings():
     default = {
         "city": "Auburn, NE",
@@ -418,11 +428,11 @@ def get_settings():
         "palette_team": "",
         "colors": dict(_DEFAULT_COLORS),
         "font_primary": "Barlow Condensed",
-        # Default to kiosk mode if kiosk.json is present (placed by install.sh in kiosk mode)
-        "device_mode": "kiosk" if os.path.exists(KIOSK_CONFIG_FILE) else "server",
+        # install.sh records this in settings.json; this is only the fallback
+        "device_mode": "kiosk" if _is_kiosk_install() else "server",
         "server_enable_display": True,
         # Kiosk installs serve on 5001 (install.sh points the kiosk browser there); server/combined use 5000
-        "port": 5001 if os.path.exists(KIOSK_CONFIG_FILE) else 5000,
+        "port": 5001 if _is_kiosk_install() else 5000,
         "update": {
             "source_url": "https://api.github.com/repos/auggnation/Auggment-Scoreboard/releases/latest",
             "auto_check": True,
@@ -2492,7 +2502,7 @@ def display_control(action):
 @login_required
 def backend_restart():
     try:
-        subprocess.Popen(['bash', '-c', 'sleep 1 && sudo systemctl restart scoreboard.service'])
+        _restart_later(['systemctl', 'restart', 'scoreboard.service'], delay=1)
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2920,6 +2930,22 @@ def _kiosk_browser_running():
         return r.returncode == 0
     except Exception:
         return False
+
+
+def _restart_later(command, delay):
+    """Run a reboot/restart through sudo after ``delay`` seconds. If sudo does not allow
+    it (installs made before the rule was added), exit instead: systemd restarts the
+    service (Restart=always), which loads the new code."""
+    def _run():
+        time_module.sleep(delay)
+        try:
+            ok = subprocess.run(['sudo', '-n'] + command, capture_output=True, timeout=30).returncode == 0
+        except Exception:
+            ok = False
+        if not ok and os.environ.get('INVOCATION_ID'):        # only when systemd runs us
+            print("[restart] sudo refused; restarting the service by exiting")
+            os._exit(0)
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _systemctl(args, timeout=15):
@@ -3439,7 +3465,7 @@ def update_apply():
             if ok:
                 _update_state['available'] = None  # Clear after successful apply
         if ok:
-            subprocess.Popen(['bash', '-c', 'sleep 3 && sudo systemctl reboot'])
+            _restart_later(['systemctl', 'reboot'], delay=3)
 
     threading.Thread(target=_do_apply, daemon=True).start()
     return jsonify({"status": "applying"})
@@ -3545,7 +3571,7 @@ def _schedule_loop():
                             if ok:
                                 _update_state['available'] = None
                         if ok:
-                            subprocess.Popen(['bash', '-c', 'sleep 3 && sudo systemctl reboot'])
+                            _restart_later(['systemctl', 'reboot'], delay=3)
         except Exception as e:
             print(f"Update check error: {e}")
 

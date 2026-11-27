@@ -172,7 +172,7 @@ case "$DISTRO_FAMILY" in
             python3 \
             python3-flask \
             python3-requests \
-            python3-pytz \
+            python3-tz \
             python3-dateutil \
             python3-pip \
             curl \
@@ -279,9 +279,6 @@ if [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]]; then
                     echo "Installing chromium-browser via apt..."
                     apt-get install -y chromium-browser
                     BROWSER_BIN="chromium-browser"
-                    echo "Installing chromium via apt..."
-                    apt-get install -y chromium
-                    BROWSER_BIN="chromium"
                 elif [[ "$ARCH" == "x86_64" || "$ARCH" == "amd64" ]]; then
                     # Debian 12+/no chromium package: fall back to Google Chromium's
                     # .deb (a real browser that works in --kiosk without sandbox hacks).
@@ -435,6 +432,28 @@ else
     echo "  OK: settings.json (existing config preserved)"
 fi
 
+# Record the chosen mode and port. Without this the app has to guess them from which
+# files exist. A port you changed yourself is kept while the mode stays the same.
+python3 - "$APP_DIR/settings.json" "$MODE" "$DISPLAY_PORT" <<'PYEOF'
+import json, sys
+path, port = sys.argv[1], int(sys.argv[3])
+mode = "kiosk" if sys.argv[2] == "kiosk" else "server"   # combined = server + display
+try:
+    with open(path) as f:
+        settings = json.load(f)
+except FileNotFoundError:
+    settings = {}
+except ValueError:
+    print("  WARNING: settings.json is not valid JSON - left unchanged")
+    sys.exit(0)
+if settings.get("device_mode") != mode:
+    settings.update(device_mode=mode, port=port)
+settings.setdefault("port", port)
+with open(path, "w") as f:
+    json.dump(settings, f, indent=2)
+print(f"  OK: settings.json (mode {mode}, port {settings['port']})")
+PYEOF
+
 # kiosk.json — kiosk mode: create with the chosen server URL if absent.
 #              server/combined: preserve if present, else copy default.
 if [[ ! -f "$APP_DIR/kiosk.json" ]]; then
@@ -519,6 +538,11 @@ if [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]]; then
     done
     echo ""
 
+    # A "Lite"/server image boots to a text console, where neither LightDM nor the
+    # kiosk service would ever start.
+    systemctl set-default graphical.target
+    echo ""
+
     echo "--- Configuring Auto-Login (LightDM) ---"
     mkdir -p /etc/lightdm/lightdm.conf.d
     cat > /etc/lightdm/lightdm.conf.d/50-scoreboard.conf <<EOF
@@ -546,6 +570,11 @@ EOF
     echo "--- Creating Kiosk Launch Script ---"
     # Resolve the full binary path now so it's baked into the script
     BROWSER_EXEC=$(command -v "$BROWSER_BIN")
+    # Snap Chromium (Ubuntu) may not write to hidden folders such as ~/.config.
+    BROWSER_PROFILE="/home/$APP_USER/.config/browser-kiosk"
+    if [[ "$BROWSER_BIN" == chromium* && -d /snap/chromium ]]; then
+        BROWSER_PROFILE="/home/$APP_USER/snap/chromium/common/browser-kiosk"
+    fi
 
     cat > "$APP_DIR/start_kiosk.sh" <<EOF
 #!/bin/bash
@@ -556,9 +585,8 @@ sleep 2
 
 # Prefer the port app.py actually binds (settings.json) when present, so the
 # browser always lands on the same port the backend serves, whatever mode that is.
-_APP_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-: "\${DISPLAY_PORT:=5000}"
-[ -f "\$_APP_DIR/kiosk.json" ] && DISPLAY_PORT=5001
+_APP_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+DISPLAY_PORT=$DISPLAY_PORT
 if command -v python3 >/dev/null 2>&1 && [ -f "\$_APP_DIR/settings.json" ]; then
     SPORT=\$(python3 - "\$_APP_DIR/settings.json" <<'PYEOF' 2>/dev/null
 import json, sys
@@ -617,9 +645,9 @@ exec $BROWSER_EXEC \\
     --check-for-update-interval=31536000 \\
     --confirm-to-quit \\
     \$CHROME_GEOMETRY \\
-    --user-data-dir=/home/$APP_USER/.config/browser-kiosk \\
+    --user-data-dir=$BROWSER_PROFILE \\
     $EXTRA_BROWSER_FLAGS \\
-    "http://localhost:\$DISPLAY_PORT/?v=\$(cat "\$APP_DIR/version.txt" 2>/dev/null || echo 1.0.9)"
+    "http://localhost:\$DISPLAY_PORT/?v=\$(cat "\$_APP_DIR/version.txt" 2>/dev/null || echo 0)"
 EOF
     chmod +x "$APP_DIR/start_kiosk.sh"
     echo "Written: $APP_DIR/start_kiosk.sh"
@@ -678,6 +706,13 @@ $APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl start kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl stop kiosk.service
 $APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart kiosk.service
+# "Restart Backend" and the reboot after a software update
+$APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH restart scoreboard.service
+$APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart scoreboard.service
+$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart scoreboard.service
+$APP_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH reboot
+$APP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot
+$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl reboot
 # Wi-Fi management (incl. bringing interfaces up for scanning)
 $APP_USER ALL=(ALL) NOPASSWD: $NMCLI_PATH
 $APP_USER ALL=(ALL) NOPASSWD: $IWLIST_PATH

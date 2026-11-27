@@ -2,6 +2,16 @@
 
 ![Scoreboard](Images/Scoreboard1.png)
 
+## What's New (next release)
+
+**Installer fixes**, tested on fresh Debian 12, Debian 13 and Ubuntu 24.04 virtual machines:
+
+* Ubuntu and Debian 12 (including Raspberry Pi OS based on it) no longer stop on a missing `python3-pytz` package, and Ubuntu no longer stops while installing Chromium.
+* Combined and server installs stay on port 5000 — opening Settings could move them to 5001 after a restart.
+* Images that boot to a text console now boot to the kiosk screen.
+* The kiosk launcher no longer remembers the folder the installer was run from.
+* **Restart Backend** and the reboot after **Apply Update** now work. On an existing install, re-run `install.sh` once; until then the app restarts its own service instead.
+
 ## What's New in 1.6
 
 **Cutting down on API polling.** Version 1.5 still asked ESPN far too often: any game in any selected league was polled every 30 seconds, favorite or not, which added up to many thousands of requests a day and risked getting the address blocked. In a simulated 12-league Saturday, 1.5 sent about **14,000** requests. 1.6 sends about **420**.
