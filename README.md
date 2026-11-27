@@ -2,7 +2,16 @@
 
 ![Scoreboard](Images/Scoreboard1.png)
 
-**Current version: 1.7.1** · [Download the latest release](https://github.com/auggnation/Auggment-Scoreboard/releases/latest) · [What's new](#whats-new-in-171)
+**Current version: 1.8** · [Download the latest release](https://github.com/auggnation/Auggment-Scoreboard/releases/latest) · [What's new](#whats-new-in-18)
+
+## What's New in 1.8
+
+**No more factory password on new installs.**
+
+* `install.sh` creates a random first password for the `admin` user and prints it when it finishes. You still choose your own at first sign-in.
+* Only a hash is stored in the settings. A readable copy (`first-login.txt`, owner-only) is deleted as soon as you change the password.
+* Kiosk and combined installs wait for you to press Enter before rebooting, so there is time to write it down.
+* Existing installs keep their current login. Re-running the installer does not change it.
 
 ## What's New in 1.7.1
 
@@ -155,7 +164,7 @@ Once installed, find the device's IP address (`hostname -I` on the Pi, or check 
 | Combined            | `5000` | `http://<device-ip>:5000/settings`  |
 | Kiosk               | `5001` | `http://<device-ip>:5001/settings`  |
 
-**First sign-in is `admin` / `root`.** You are then asked to choose your own password (at least 8 characters) before the settings open. Change it later under Settings → Device → Admin Sign-in.
+**First sign-in:** the user is `admin` and the installer prints a random password when it finishes (also readable with `sudo cat <install-dir>/first-login.txt` until you change it). If you run `app.py` without the installer, or are upgrading an install that never changed it, the password is `root`. Either way you are asked to choose your own password (at least 8 characters) before the settings open. Change it later under Settings → Device → Admin Sign-in.
 
 **Forgot it?** On the device, remove the `admin_credentials` entry from `settings.json` and run `sudo systemctl restart scoreboard`. Sign in with `admin` / `root` and choose a new one.
 

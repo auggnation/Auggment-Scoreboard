@@ -2435,6 +2435,10 @@ def change_password_page():
                 "password_hash": generate_password_hash(new, method=PASSWORD_HASH),
                 "changed_at": datetime.now(timezone.utc).isoformat(),
             }})
+            try:                                  # the installer's readable first password
+                os.remove(os.path.join(APP_DIR, 'first-login.txt'))
+            except OSError:
+                pass
             with _sessions_lock:
                 _sessions.clear()                 # everyone signs in again with the new one
             _sign_in(username)

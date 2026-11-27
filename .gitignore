@@ -3,6 +3,7 @@ settings.json
 kiosk.json
 paired_kiosks.json
 .secret_key
+first-login.txt
 
 # Offline cache (schedules, teams, feeds, weather, favourite logos)
 cache/

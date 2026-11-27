@@ -382,6 +382,14 @@ find_src() {
     echo ""
 }
 
+# Fresh = never installed here. Only then is a random first password created, so
+# re-running the installer never changes a login that is already in use.
+FIRST_LOGIN_FILE="$APP_DIR/first-login.txt"
+FRESH_INSTALL=0
+if [[ ! -f /etc/systemd/system/scoreboard.service && ! -f "$APP_DIR/settings.json" ]]; then
+    FRESH_INSTALL=1
+fi
+
 # ─── APPLICATION DIRECTORIES ─────────────────────────────────────────────────
 echo "--- Setting Up Application Directories ---"
 # Every directory the app touches at runtime, so nothing relies on lazy mkdir.
@@ -453,6 +461,31 @@ with open(path, "w") as f:
     json.dump(settings, f, indent=2)
 print(f"  OK: settings.json (mode {mode}, port {settings['port']})")
 PYEOF
+
+# First sign-in: a random password instead of the well-known admin / root. Only its
+# hash goes into settings.json; the readable copy is deleted once you change it.
+if [[ $FRESH_INSTALL -eq 1 ]]; then
+    python3 - "$APP_DIR/settings.json" "$FIRST_LOGIN_FILE" <<'PYEOF'
+import json, os, secrets, sys
+from werkzeug.security import generate_password_hash
+path, note = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    settings = json.load(f)
+if "admin_credentials" not in settings:
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"      # nothing that looks alike
+    password = "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3))
+    # The readable copy first: a login must never exist that nobody can read.
+    with os.fdopen(os.open(note, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+        f.write(f"username: admin\npassword: {password}\n")
+    settings["admin_credentials"] = {
+        "username": "admin",
+        "password_hash": generate_password_hash(password, method="pbkdf2:sha256:600000"),
+    }
+    with open(path, "w") as f:
+        json.dump(settings, f, indent=2)
+    print("  Created: a random first password (shown at the end)")
+PYEOF
+fi
 
 # kiosk.json — kiosk mode: create with the chosen server URL if absent.
 #              server/combined: preserve if present, else copy default.
@@ -769,6 +802,7 @@ chmod -R 755 "$APP_DIR"
 [[ -f "$APP_DIR/paired_kiosks.json" ]] && chmod 600 "$APP_DIR/paired_kiosks.json"
 [[ -f "$APP_DIR/start_kiosk.sh" ]] && chmod +x "$APP_DIR/start_kiosk.sh"
 [[ -f "$APP_DIR/.secret_key" ]]    && chmod 600 "$APP_DIR/.secret_key"
+[[ -f "$FIRST_LOGIN_FILE" ]]       && chmod 600 "$FIRST_LOGIN_FILE"
 [[ -f "$APP_DIR/init_display.sh" ]] && chmod +x "$APP_DIR/init_display.sh"
 [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]] && chown -R "$APP_USER:$APP_USER" "/home/$APP_USER/.config" 2>/dev/null || true
 echo "Permissions set on $APP_DIR"
@@ -828,14 +862,14 @@ elif [[ "$MODE" == "kiosk" ]]; then
     echo "  Remote server : $KIOSK_SERVER_URL"
     echo "  (Edit $APP_DIR/kiosk.json or use Settings to change the server URL)"
     echo ""
-    echo "  The system will reboot in 10 seconds and boot directly"
+    echo "  The system will now reboot and boot directly"
     echo "  into the scoreboard kiosk via HDMI."
     echo "  Press Ctrl+C to cancel the reboot."
 else
     echo "  Browser : $BROWSER_BIN"
     echo "  Display : http://localhost:$DISPLAY_PORT"
     echo ""
-    echo "  The system will reboot in 10 seconds and boot directly"
+    echo "  The system will now reboot and boot directly"
     echo "  into the scoreboard kiosk via HDMI."
     echo "  Press Ctrl+C to cancel the reboot."
 fi
@@ -843,7 +877,21 @@ fi
 [[ $WARN -eq 1 ]] && echo ""
 echo "======================================================="
 
+# Last thing on screen, so it is not scrolled away
+if [[ -f "$FIRST_LOGIN_FILE" ]]; then
+    echo ""
+    echo "  FIRST SIGN-IN - write this down"
+    sed 's/^/      /' "$FIRST_LOGIN_FILE"
+    echo "  You will be asked to choose your own password."
+    echo "  Until then a copy is kept here:  sudo cat $FIRST_LOGIN_FILE"
+    echo "======================================================="
+fi
+
 if [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]]; then
-    sleep 10
+    if [[ -f "$FIRST_LOGIN_FILE" && -t 0 ]]; then
+        read -rp "  Press Enter once you have written it down, to reboot. " _
+    else
+        sleep 10
+    fi
     reboot
 fi
