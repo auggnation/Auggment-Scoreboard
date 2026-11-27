@@ -4,73 +4,6 @@
 
 **Current version: 1.8** · [Download the latest release](https://github.com/auggnation/Auggment-Scoreboard/releases/latest) · [What's new](#whats-new-in-18)
 
-## What's New in 1.8
-
-**No more factory password on new installs.**
-
-* `install.sh` creates a random first password for the `admin` user and prints it when it finishes. You still choose your own at first sign-in.
-* Only a hash is stored in the settings. A readable copy (`first-login.txt`, owner-only) is deleted as soon as you change the password.
-* Kiosk and combined installs wait for you to press Enter before rebooting, so there is time to write it down.
-* Existing installs keep their current login. Re-running the installer does not change it.
-
-## What's New in 1.7.1
-
-**Sign-in security.** Update the server and every kiosk, then sign in once on each to set its password. Do it soon after updating: until then the old or factory password still opens the password screen.
-
-* **Change your password at first sign-in.** The settings stay locked until you do. Existing installs are asked once too, even if the password had been changed before.
-* **Password rules** — at least 8 characters; common and trivial passwords, your username and the previous password are refused.
-* **Guessing is slowed** — after 5 wrong tries an address must wait 1 minute, doubling up to 15; a flood from many addresses pauses sign-in for 5 minutes. Pairing codes are limited the same way.
-* **The password is no longer exposed** — it is stored hashed, and `/api/settings` (which used to give it to anyone on the network) now returns only the theme unless you are signed in.
-* **Sessions** — each install has its own signing key (it used to be one public value everywhere, so sign-ins could be forged). Signing out, changing the password or restarting ends sessions; they expire after 12 hours.
-* **Other websites cannot act for you** — cross-site requests are refused, and the sign-in and settings pages cannot be framed.
-* **Injected text** — Wi-Fi network names and kiosk names can no longer run code on the settings page.
-* **Linux-account sign-in removed** — on many installs it accepted any password.
-* **Kiosks** — update downloads now require the kiosk's pairing token, and the pairing status page requires sign-in.
-* **Private files** — `settings.json`, `kiosk.json`, `paired_kiosks.json` and the session key are readable only by the service account.
-
-## What's New in 1.6.5
-
-**Installer fixes**, tested on fresh Debian 12, Debian 13 and Ubuntu 24.04 virtual machines. If you already have the scoreboard installed: update, reboot the device once, then re-run `install.sh` from the 1.6.5 download. Your settings are kept.
-
-* Ubuntu and Debian 12 (including Raspberry Pi OS based on it) no longer stop on a missing `python3-pytz` package, and Ubuntu no longer stops while installing Chromium.
-* Combined and server installs stay on port 5000 — opening Settings could move them to 5001 after a restart.
-* Images that boot to a text console now boot to the kiosk screen.
-* The kiosk launcher no longer remembers the folder the installer was run from.
-* **Restart Backend** and the reboot after **Apply Update** now work. Until `install.sh` has been re-run on an existing install, the app restarts its own service instead of rebooting.
-
-## What's New in 1.6
-
-**Cutting down on API polling.** Version 1.5 still asked ESPN far too often: any game in any selected league was polled every 30 seconds, favorite or not, which added up to many thousands of requests a day and risked getting the address blocked. In a simulated 12-league Saturday, 1.5 sent about **14,000** requests. 1.6 sends about **420**.
-
-* **Midnight read** — schedules are fetched once, just after local midnight, usually one request per league per month. If nothing is happening, that is all for 24 hours.
-* **Game day** — a favorite's game later today is checked every 3 hours until it starts.
-* **Live** — once a minute, only while a favorite's game is on.
-* **You choose the pace** — an update interval from 1 minute to 24 hours (default 24), favorites-only (default) or every-game polling. This replaces `live_favorites_only`.
-* **Guard rails** — every request is counted and shown in Settings, capped at 3,000 a day, and a refusal from ESPN (429/403) pauses requests for 30 minutes.
-* **Offline** — a paired kiosk shows its server's saved data when the server is unreachable instead of going to ESPN.
-
-Also in this release:
-
-* **Quick switch** card transition, adjustable from 0.2 to 1.9 seconds.
-* **Reorganized settings** — Games, Updates, Screen, Look and Device pages with a live status strip.
-* **Fixed** — NASCAR now uses ESPN's current series address.
-
-Good to know when upgrading: in favorites-only mode, leagues where you follow nobody update their ticker scores overnight; a paired kiosk now takes its slide timing and transition from its own settings. See [Smart Polling & Offline Mode](#smart-polling--offline-mode).
-
-## What's New in 1.5
-
-Version 1.5 is about doing far less work for the same screen: the scoreboard now asks ESPN only when there is something new to learn, and it remembers what it learned.
-
-* **Smart polling** — scores are only polled while a game is in progress or about to start. A game that is days away costs nothing between schedule checks. See [Smart Polling & Offline Mode](#smart-polling--offline-mode).
-* **Schedule checks a few times a day** — game times are re-verified just after midnight, then at 6 AM, noon and 5 PM (midnight and noon only, when nothing you follow starts within 24 hours), so a rescheduled game is still caught.
-* **Offline mode** — league schedules, team lists and colors, local school schedules, weather and your favorite teams' logos are saved to disk (`cache/`). A restart or an internet outage keeps showing the last known data instead of a blank screen.
-* **Far fewer API calls** — a live score update is one request for today instead of one per day of the look-ahead window; local school feeds and weather are no longer re-fetched on every 30-second kiosk refresh; failures back off instead of retrying constantly.
-* **Fixes** — leagues requested by a kiosk keep refreshing (they used to freeze after the first load); an HTTP 4xx from ESPN (e.g. an off-season series) is treated as "no data" rather than an outage.
-* **New setting** — `live_favorites_only` (in `settings.json`) so only games involving your favorite teams wake the live poller.
-* **Packaging** — a new `smartcache.py` module ships alongside `app.py` (installer, update package and release zip all include it).
-
-Upgrading from 1.3 needs no changes to your settings; the cache builds itself on first run.
-
 ## What This Is
 
 Auggmented Scoreboard turns any spare TV into a live, always-on sports ticker for the games you actually care about. Point it at a TV in the kitchen, the garage, the man cave, a break room, a sports bar, a gym, or a church fellowship hall — anywhere people glance up wanting to know the score right now instead of waiting for it.
@@ -260,6 +193,73 @@ The app uses `xset` to control the TV over DPMS/HDMI-CEC for the scheduled "Powe
 * **Data Not Updating** — Check backend logs with `journalctl -u scoreboard -f` and verify the machine has internet access to reach ESPN's APIs. Games that are days away, and leagues without a favorite, are deliberately not polled during the day: open Settings → Updates to see each league's last check, next check and today's ESPN request count. While offline the last known schedule keeps displaying, and the app retries with growing delays (up to 1 hour).
 * **Stale or Wrong Schedule After a Change** — Press **FORCE REFRESH** on Settings → Updates, or delete the `cache/` folder next to `app.py` and restart the service; it rebuilds itself on the next load.
 * **Sudo Errors** — The app needs specific `NOPASSWD` entries in `/etc/sudoers.d/scoreboard` to control the display and services from the web UI. These are created automatically by the installer.
+
+## What's New in 1.8
+
+**No more factory password on new installs.**
+
+* `install.sh` creates a random first password for the `admin` user and prints it when it finishes. You still choose your own at first sign-in.
+* Only a hash is stored in the settings. A readable copy (`first-login.txt`, owner-only) is deleted as soon as you change the password.
+* Kiosk and combined installs wait for you to press Enter before rebooting, so there is time to write it down.
+* Existing installs keep their current login. Re-running the installer does not change it.
+
+## What's New in 1.7.1
+
+**Sign-in security.** Update the server and every kiosk, then sign in once on each to set its password. Do it soon after updating: until then the old or factory password still opens the password screen.
+
+* **Change your password at first sign-in.** The settings stay locked until you do. Existing installs are asked once too, even if the password had been changed before.
+* **Password rules** — at least 8 characters; common and trivial passwords, your username and the previous password are refused.
+* **Guessing is slowed** — after 5 wrong tries an address must wait 1 minute, doubling up to 15; a flood from many addresses pauses sign-in for 5 minutes. Pairing codes are limited the same way.
+* **The password is no longer exposed** — it is stored hashed, and `/api/settings` (which used to give it to anyone on the network) now returns only the theme unless you are signed in.
+* **Sessions** — each install has its own signing key (it used to be one public value everywhere, so sign-ins could be forged). Signing out, changing the password or restarting ends sessions; they expire after 12 hours.
+* **Other websites cannot act for you** — cross-site requests are refused, and the sign-in and settings pages cannot be framed.
+* **Injected text** — Wi-Fi network names and kiosk names can no longer run code on the settings page.
+* **Linux-account sign-in removed** — on many installs it accepted any password.
+* **Kiosks** — update downloads now require the kiosk's pairing token, and the pairing status page requires sign-in.
+* **Private files** — `settings.json`, `kiosk.json`, `paired_kiosks.json` and the session key are readable only by the service account.
+
+## What's New in 1.6.5
+
+**Installer fixes**, tested on fresh Debian 12, Debian 13 and Ubuntu 24.04 virtual machines. If you already have the scoreboard installed: update, reboot the device once, then re-run `install.sh` from the 1.6.5 download. Your settings are kept.
+
+* Ubuntu and Debian 12 (including Raspberry Pi OS based on it) no longer stop on a missing `python3-pytz` package, and Ubuntu no longer stops while installing Chromium.
+* Combined and server installs stay on port 5000 — opening Settings could move them to 5001 after a restart.
+* Images that boot to a text console now boot to the kiosk screen.
+* The kiosk launcher no longer remembers the folder the installer was run from.
+* **Restart Backend** and the reboot after **Apply Update** now work. Until `install.sh` has been re-run on an existing install, the app restarts its own service instead of rebooting.
+
+## What's New in 1.6
+
+**Cutting down on API polling.** Version 1.5 still asked ESPN far too often: any game in any selected league was polled every 30 seconds, favorite or not, which added up to many thousands of requests a day and risked getting the address blocked. In a simulated 12-league Saturday, 1.5 sent about **14,000** requests. 1.6 sends about **420**.
+
+* **Midnight read** — schedules are fetched once, just after local midnight, usually one request per league per month. If nothing is happening, that is all for 24 hours.
+* **Game day** — a favorite's game later today is checked every 3 hours until it starts.
+* **Live** — once a minute, only while a favorite's game is on.
+* **You choose the pace** — an update interval from 1 minute to 24 hours (default 24), favorites-only (default) or every-game polling. This replaces `live_favorites_only`.
+* **Guard rails** — every request is counted and shown in Settings, capped at 3,000 a day, and a refusal from ESPN (429/403) pauses requests for 30 minutes.
+* **Offline** — a paired kiosk shows its server's saved data when the server is unreachable instead of going to ESPN.
+
+Also in this release:
+
+* **Quick switch** card transition, adjustable from 0.2 to 1.9 seconds.
+* **Reorganized settings** — Games, Updates, Screen, Look and Device pages with a live status strip.
+* **Fixed** — NASCAR now uses ESPN's current series address.
+
+Good to know when upgrading: in favorites-only mode, leagues where you follow nobody update their ticker scores overnight; a paired kiosk now takes its slide timing and transition from its own settings. See [Smart Polling & Offline Mode](#smart-polling--offline-mode).
+
+## What's New in 1.5
+
+Version 1.5 is about doing far less work for the same screen: the scoreboard now asks ESPN only when there is something new to learn, and it remembers what it learned.
+
+* **Smart polling** — scores are only polled while a game is in progress or about to start. A game that is days away costs nothing between schedule checks. See [Smart Polling & Offline Mode](#smart-polling--offline-mode).
+* **Schedule checks a few times a day** — game times are re-verified just after midnight, then at 6 AM, noon and 5 PM (midnight and noon only, when nothing you follow starts within 24 hours), so a rescheduled game is still caught.
+* **Offline mode** — league schedules, team lists and colors, local school schedules, weather and your favorite teams' logos are saved to disk (`cache/`). A restart or an internet outage keeps showing the last known data instead of a blank screen.
+* **Far fewer API calls** — a live score update is one request for today instead of one per day of the look-ahead window; local school feeds and weather are no longer re-fetched on every 30-second kiosk refresh; failures back off instead of retrying constantly.
+* **Fixes** — leagues requested by a kiosk keep refreshing (they used to freeze after the first load); an HTTP 4xx from ESPN (e.g. an off-season series) is treated as "no data" rather than an outage.
+* **New setting** — `live_favorites_only` (in `settings.json`) so only games involving your favorite teams wake the live poller.
+* **Packaging** — a new `smartcache.py` module ships alongside `app.py` (installer, update package and release zip all include it).
+
+Upgrading from 1.3 needs no changes to your settings; the cache builds itself on first run.
 
 ## How This Was Made
 
