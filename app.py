@@ -27,6 +27,7 @@ FEED_TTL = 3 * 3600          # local school/league feeds
 WEATHER_TTL = 30 * 60
 SERIES_TTL = 24 * 3600       # discovered cricket series
 FAIL_COOLDOWN = 300          # after a failed fetch, wait this long before trying that source again
+TEAMS_FAIL_COOLDOWN = 3600   # some leagues have no team list at all; don't keep asking
 
 _pairing_codes = {}  # code -> expiry (time.time())
 _cache_lock = threading.Lock()
@@ -36,6 +37,8 @@ _espn_cache = {"raw_events": {}, "updated_at": None}  # raw_events: path -> [eve
 _league_meta = {}
 _requested = {}        # path -> last time a client asked for it (kiosks may track other leagues)
 _requested_conf = {}   # path -> conference filter that client used
+_requested_teams = {}  # "path:ABBR" -> last time a paired kiosk listed it as a favourite
+_poll_lock = threading.RLock()  # one ESPN poll at a time (loop vs. first-sight requests)
 _refresh_wakeup = threading.Event()
 _last_disk_write = [0.0]
 _update_lock = threading.Lock()
@@ -193,7 +196,7 @@ ESPN_API_PATHS = {
     "rugby/289234": ("rugby", "289234"),
     "rugby/164205": ("rugby", "164205"),
     "rugby/289262": ("rugby", "289262"),
-    "racing/nascar-cup": ("racing", "nascar-cup"),
+    "racing/nascar-cup": ("racing", "nascar-premier"),
     "racing/irl": ("racing", "irl"),
     "racing/f1": ("racing", "f1"),
     "golf/pga": ("golf", "pga"),
@@ -387,9 +390,14 @@ def get_settings():
         "leagues": ["football/nfl"],
         "teams": [],
         "league_conferences": {},
-        # True = only games involving your favourite teams wake the live poller
-        # (other games in the league still show, they just refresh on the schedule checks)
-        "live_favorites_only": False,
+        # How often to ask ESPN for updates outside live games, in minutes (1 - 1440).
+        # Schedules are always re-read nightly; live tracked games are always 1 minute.
+        "update_interval_minutes": 1440,
+        # "favorites": only favourite teams' games are checked during the day.
+        # "all": any game in a selected league (far more requests).
+        "live_scope": "favorites",
+        # Safety net: never send ESPN more than this many requests a day (0 = no limit).
+        "daily_api_limit": 3000,
         "timezone": "America/Chicago",
         "admin_credentials": {"username": "admin", "password": "root"},
         "schedule": {
@@ -423,6 +431,7 @@ def get_settings():
         },
         "slide_duration": 8,
         "slide_transition": "slide-right",
+        "transition_seconds": 0.8,   # length of the "quick switch" transition (under 2 s)
         "ticker_speed": 120,
         "date_windows": {},
         # Local sports: manual games + parsed feeds (RSS/iCal/MaxPreps/Thrillshare).
@@ -520,8 +529,33 @@ def save_kiosks(kiosks):
         json.dump(kiosks, f, indent=2)
 
 
+class EspnLimitReached(requests.RequestException):
+    """Today's ESPN request ceiling is used up."""
+
+
+meter = smartcache.RequestMeter(
+    os.path.join(CACHE_DIR, 'api_usage.json'),
+    limit=lambda: get_settings().get('daily_api_limit', 3000),
+    today=lambda: datetime.now(_settings_tz(get_settings())).date().isoformat())
+
+
+def _espn_get(url, kind, session=None, timeout=8, **kwargs):
+    """The only way this app talks to ESPN: every request is counted and capped, and a
+    "slow down" answer (429 / 403) pauses all of them for a while."""
+    if not meter.acquire(kind):
+        raise EspnLimitReached('daily ESPN request limit reached, or paused after a refusal')
+    resp = (session or requests).get(url, timeout=timeout, **kwargs)
+    if resp.status_code in (403, 429):
+        meter.pause()
+        print(f"[espn] HTTP {resp.status_code}: pausing ESPN requests for {meter.REFUSED_PAUSE // 60} min")
+    return resp
+
+
 def _download_logo(url):
-    r = requests.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+    if 'espncdn.com' in url:
+        r = _espn_get(url, 'logos', headers={'User-Agent': 'Mozilla/5.0'})
+    else:
+        r = requests.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
     if r.ok and r.headers.get('Content-Type', '').startswith('image/') and len(r.content) < 2_000_000:
         return r.content
     return None
@@ -621,9 +655,9 @@ def _discover_espn_series(sport):
     seen = set()
     for region in ("us", "in", "gb", "au", "za"):
         try:
-            r = requests.get(
+            r = _espn_get(
                 f"https://site.web.api.espn.com/apis/personalized/v2/scoreboard/header?sport={sport}&region={region}&lang=en",
-                timeout=8,
+                'discovery',
             )
             if not r.ok:
                 continue
@@ -641,63 +675,65 @@ def _discover_espn_series(sport):
     return _kv.get(f"series:{sport}") or []   # offline: last known list
 
 
-def _fetch_discovered_events(sport, series_ids):
-    """Return (events, error_count) across every discovered series."""
+def _fetch_discovered_events(sport, series_ids, kind):
+    """Return (events, error_count) across the given series. Each event remembers its
+    series so a live poll can ask for just that one."""
     events, errors = [], 0
     seen = set()
     for lid in series_ids:
         try:
-            r = requests.get(
-                f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{lid}/scoreboard",
-                timeout=8,
-            )
+            r = _espn_get(f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{lid}/scoreboard", kind)
             if not r.ok:
-                errors += 1
+                errors += int(r.status_code >= 500 or r.status_code == 429)
                 continue
             for e in r.json().get("events", []):
                 eid = e.get("id")
                 if eid and eid not in seen:
                     seen.add(eid)
+                    e["_series"] = lid
                     events.append(e)
+        except requests.RequestException:
+            errors += 1
+            break                          # offline or over the daily limit
         except Exception:
             errors += 1
     return events, errors
 
 
-def _fetch_league(path, league_conferences, days_back=0, days_ahead=14, dates=None):
+def _fetch_league(path, league_conferences, queries, kind='schedule', series=None):
     """Fetch one league from ESPN. Returns (events, error_count).
 
-    ``dates`` (list of date objects) limits the fetch to those days - used by live
-    polling so a score update costs one request instead of one per window day.
+    ``queries`` is a list of ``(query_string, fallback_days)`` - see
+    smartcache.full_queries. ``kind`` is 'schedule' (full window) or 'live'.
     """
     if path == "cricket/current":
-        return _fetch_discovered_events("cricket", _discover_espn_series("cricket"))
+        return _fetch_discovered_events("cricket", series or _discover_espn_series("cricket"), kind)
     sport, league = ESPN_API_PATHS.get(path, (path.split('/')[0], path.split('/')[-1]))
     base_host = "site.web.api.espn.com" if path in ESPN_WEB_API_LEAGUES else "site.api.espn.com"
     base_url = f"https://{base_host}/apis/site/v2/sports/{sport}/{league}/scoreboard"
     errors = [0]
+    stop = [False]
 
     def _groups_param():
         conf_val = league_conferences.get(path, '')
         conf_id = ','.join(conf_val) if isinstance(conf_val, list) else conf_val
         return f"groups={conf_id}" if conf_id else ''
 
-    network_down = [False]
-
-    def _get(url, session=requests):
-        if network_down[0]:                      # one connection failure is enough - don't
-            return []                            # burn a timeout per remaining day
+    def _get(url, session=None):
+        if stop[0]:                      # one connection failure is enough - don't
+            return []                    # burn a timeout per remaining query
         try:
-            resp = session.get(url, timeout=8)
+            resp = _espn_get(url, kind, session=session)
         except requests.RequestException:
             errors[0] += 1
-            network_down[0] = True
+            stop[0] = True
             return []
         if not resp.ok:
             # 5xx / 429 = outage worth retrying. A 4xx means ESPN answered with nothing
-            # for this request (e.g. off-season series) - treat as "no data", not a failure.
-            if resp.status_code >= 500 or resp.status_code == 429:
+            # for this request (e.g. off-season series) - "no data", not a failure.
+            if resp.status_code >= 500 or resp.status_code in (403, 429):
                 errors[0] += 1
+                stop[0] = resp.status_code in (403, 429)
             return []
         try:
             raw = resp.json().get('events', [])
@@ -710,37 +746,31 @@ def _fetch_league(path, league_conferences, days_back=0, days_ahead=14, dates=No
     if path in ESPN_NO_DATE_LEAGUES:
         qs = _groups_param()
         events = _get(base_url + (f"?{qs}" if qs else ''))
-        if not events and qs:
+        if not events and qs and kind == 'schedule':
             events = _get(base_url)
     else:
-        if dates is None:
-            now = datetime.now()
-            start = (now - timedelta(days=days_back)).date()
-            end = (now + timedelta(days=max(days_ahead, 1))).date()
-            dates, day = [], start
-            while day <= end:
-                dates.append(day)
-                day += timedelta(days=1)
-
-        # ESPN's hyphenated dates=START-END range returns HTTP 400, so fetch each day
-        # separately and merge.
-        def _fetch_days(with_groups):
+        def _run(with_groups):
             fetched, seen = [], set()
             qs = _groups_param() if with_groups else ''
+            suffix = f"&{qs}" if qs else ''
             with requests.Session() as s:
-                for day in dates:
-                    url = f"{base_url}?dates={day.strftime('%Y%m%d')}" + (f"&{qs}" if qs else '')
-                    for e in _get(url, s):
+                for query, fallback_days in queries:
+                    batch = _get(f"{base_url}?{query}{suffix}", s)
+                    if fallback_days and len(batch) >= smartcache.MONTH_LIMIT - 5:
+                        # Probably truncated: read the days we care about one by one.
+                        batch = [e for d in fallback_days
+                                 for e in _get(f"{base_url}?{smartcache.day_query(d)}{suffix}", s)]
+                    for e in batch:
                         if e.get('id') not in seen:
                             seen.add(e.get('id'))
                             fetched.append(e)
             return fetched
 
-        events = _fetch_days(True)
-        if not events and _groups_param():
+        events = _run(True)
+        if not events and kind == 'schedule' and _groups_param() and not errors[0]:
             # A stale/empty conference group filter can make ESPN return nothing;
             # fall back to the unfiltered slate.
-            events = _fetch_days(False)
+            events = _run(False)
 
     # Fall back to NASCAR.com live feed if ESPN has no data
     if not events and path == 'racing/nascar-cup':
@@ -756,13 +786,10 @@ def _fetch_league(path, league_conferences, days_back=0, days_ahead=14, dates=No
     return events, errors[0]
 
 
-def _fetch_league_raw(path, league_conferences, days_back=0, days_ahead=14):
-    return _fetch_league(path, league_conferences, days_back, days_ahead)[0]
-
-
 # ─── Smart polling ───
-# Full window fetches run a few times a day (see smartcache.SCHEDULE_SLOTS); live
-# polls run only while a relevant game is in progress or about to start.
+# smartcache.plan_league decides when ESPN is asked for anything: a nightly grab,
+# a check every few hours on game day, once a minute while a tracked game is live,
+# and optionally at the user's chosen update interval.
 
 def _fetch_window(settings):
     dw = settings.get('date_windows', {})
@@ -788,31 +815,45 @@ def _league_sig(path, settings):
     return f"{back}:{ahead}:{json.dumps(_conf_for(path, settings), sort_keys=True)}"
 
 
-def _relevance(path, settings):
-    """Predicate limiting which games may trigger live polling, or None for 'all'.
+def _never(_event):
+    return False
 
-    With ``live_favorites_only`` on, a league that has favourite teams is only
-    polled live for games involving them.
+
+def _relevance(path, settings):
+    """Which games count as tracked (and so may wake the poller). None = every game.
+
+    Default ('favorites'): only games with a favourite team - this device's or one a
+    paired kiosk asked for. A league nobody has a favourite in is read once a night.
     """
-    if not settings.get('live_favorites_only') or path in MOTORSPORTS_LEAGUES or path in GOLF_LEAGUES:
+    if settings.get('live_scope') == 'all':
         return None
+    if path in MOTORSPORTS_LEAGUES:
+        return None if settings.get(MOTORSPORTS_FAV_KEY.get(path, 'nascar_favorites')) else _never
+    if path in GOLF_LEAGUES:
+        return None if settings.get('golf_favorites') else _never
+    now = time_module.time()
+    teams = list(settings.get('teams', []))
+    teams += [t for t, at in list(_requested_teams.items()) if now - at < 24 * 3600]
     prefix = path.lower() + ':'
-    favs = {t.rsplit(':', 1)[1].upper() for t in settings.get('teams', [])
-            if isinstance(t, str) and t.lower().startswith(prefix) and ':' in t}
+    favs = {t.rsplit(':', 1)[1].upper() for t in teams
+            if isinstance(t, str) and t.lower().startswith(prefix)}
     if not favs:
-        return None
+        return _never
 
     def _rel(ev):
         try:
             return any((c.get('team', {}).get('abbreviation') or '').upper() in favs
                        for c in ev['competitions'][0]['competitors'])
         except Exception:
-            return True
+            return False
     return _rel
 
 
 def _league_cache_file(path):
     return os.path.join(CACHE_DIR, 'events', path.replace('/', '__') + '.json')
+
+
+_META_KEYS = ('full_at', 'checked_at', 'seen', 'sig')
 
 
 def _persist_league(path, force=False):
@@ -827,7 +868,7 @@ def _persist_league(path, force=False):
     meta['disk_at'] = now
     smartcache.save_json(_league_cache_file(path), {
         "events": events,
-        "meta": {k: meta.get(k) for k in ('full_at', 'live_at', 'sig')},
+        "meta": {k: meta.get(k) for k in _META_KEYS},
     })
 
 
@@ -851,7 +892,7 @@ def _load_disk_cache():
         with _cache_lock:
             _espn_cache["raw_events"][path] = doc['events']
         _league_meta[path] = {k: v for k, v in meta.items() if v is not None}
-        latest = max(latest, meta.get('live_at') or meta.get('full_at') or 0)
+        latest = max(latest, meta.get('checked_at') or meta.get('full_at') or 0)
         loaded += 1
     if latest:
         _espn_cache["updated_at"] = datetime.fromtimestamp(latest).isoformat()
@@ -859,90 +900,85 @@ def _load_disk_cache():
         print(f"[cache] Restored {loaded} leagues from disk")
 
 
-def _live_dates(path, settings):
-    """Dates a live poll must cover: today, plus yesterday just after midnight or
-    while a game that started yesterday is still running."""
-    tz = _settings_tz(settings)
-    now_local = datetime.now(tz)
-    today = now_local.date()
-    dates = [today]
-    late_game = False
+def _plan_for(path, settings, now=None):
+    now = now or time_module.time()
     with _cache_lock:
-        events = list(_espn_cache["raw_events"].get(path) or [])
-    for ev in events:
-        if smartcache.event_state(ev) == 'in':
-            start = smartcache.parse_utc(ev.get('date'))
-            if start and start.astimezone(tz).date() < today:
-                late_game = True
-    if late_game or now_local.hour < 6:
-        dates.insert(0, today - timedelta(days=1))
-    return dates
+        events = _espn_cache["raw_events"].get(path)
+    meta = _league_meta.get(path, {})
+    if events is None:
+        meta = {k: v for k, v in meta.items() if k in ('fails', 'attempt_at')}
+    return smartcache.plan_league(
+        path, events, meta, now, _settings_tz(settings), _league_sig(path, settings),
+        smartcache.clamp_interval(settings.get('update_interval_minutes')),
+        _relevance(path, settings))
 
 
-def _poll_league(path, settings, mode):
-    """Fetch one league ('full' window or 'live' today-only). True on success."""
+def _poll_league(path, settings, mode='full', dates=()):
+    """Fetch one league: the 'full' window, or an 'update' of just ``dates``."""
     now = time_module.time()
     meta = _league_meta.setdefault(path, {})
     meta['attempt_at'] = now
     back, ahead = _fetch_window(settings)
     conf = {path: _conf_for(path, settings)}
+    with _cache_lock:
+        old = _espn_cache["raw_events"].get(path)
+    full = mode == 'full'
+    series = None
+    if full:
+        queries = smartcache.full_queries(path, back, ahead, now)
+    else:
+        queries = [(smartcache.day_query(d), []) for d in dates]
+        if path == 'cricket/current':
+            series = sorted({e['_series'] for e in old or [] if e.get('_series')
+                             and smartcache.parse_utc(e.get('date'))
+                             and smartcache.feed_date(smartcache.parse_utc(e['date'])) in dates})
     try:
-        events, errors = _fetch_league(path, conf, back, ahead,
-                                       dates=_live_dates(path, settings) if mode == 'live' else None)
+        events, errors = _fetch_league(path, conf, queries, 'schedule' if full else 'live', series)
     except Exception as e:
         print(f"[cache] {path}: {e}")
         events, errors = [], 1
-    with _cache_lock:
-        old = _espn_cache["raw_events"].get(path)
     if errors and not events:
         meta['fails'] = meta.get('fails', 0) + 1
         return False                                  # keep serving what we have
-    if mode == 'full' and not errors:
+    if full and not errors:
         merged = smartcache.prune_events(events, now, back, ahead)
-        meta['full_at'] = now
-        meta['sig'] = _league_sig(path, settings)
-        meta['fails'] = 0
+        meta.update(full_at=now, sig=_league_sig(path, settings), seen={})
     else:
         merged = smartcache.merge_events(old, events)
-        meta['fails'] = meta.get('fails', 0) + 1 if errors else 0
-    meta['live_at'] = now
+        if not errors:
+            seen = meta.setdefault('seen', {})
+            for d in dates:
+                seen[d.isoformat()] = now
+    meta['fails'] = meta.get('fails', 0) + 1 if errors else 0
+    meta['checked_at'] = now
     with _cache_lock:
         _espn_cache["raw_events"][path] = merged
         _espn_cache["updated_at"] = datetime.now().isoformat()
-    _persist_league(path, force=(mode == 'full'))
+
+    def _states(evs):
+        return {e.get('id'): smartcache.event_state(e) for e in evs or []}
+    # Live polls are frequent; write at once only when something material changed.
+    _persist_league(path, force=full or _states(old) != _states(merged))
     return not errors
 
 
 def _poll_paths(settings):
     now = time_module.time()
-    recent = 24 * 3600 if settings.get('device_mode') == 'server' else 600
-    paths = list(settings.get('leagues', [])) if settings.get('device_mode') == 'server' else []
-    paths += [p for p, t in _requested.items() if now - t < recent and p not in paths]
+    server = settings.get('device_mode') == 'server'
+    recent = 24 * 3600 if server else 600
+    paths = list(settings.get('leagues', [])) if server else []
+    paths += [p for p, t in list(_requested.items()) if now - t < recent and p not in paths]
     return paths
 
 
-def _due_polls(settings, now=None):
-    """[(path, 'full'|'live')] that should run now. Pure bookkeeping, no network."""
-    now = now or time_module.time()
-    tz = _settings_tz(settings)
-    due = []
+def _poll_once(settings=None):
+    """Run whatever is due. Cheap when nothing is: no network, only bookkeeping."""
+    settings = settings or get_settings()
     for path in _poll_paths(settings):
-        meta = _league_meta.get(path, {})
-        fails = meta.get('fails', 0)
-        if fails and now < meta.get('attempt_at', 0) + smartcache.backoff_seconds(fails, 30):
-            continue
-        with _cache_lock:
-            events = _espn_cache["raw_events"].get(path)
-        rel = _relevance(path, settings)
-        if (events is None or meta.get('sig') != _league_sig(path, settings)
-                or now >= smartcache.full_due_at(meta.get('full_at'), tz,
-                                                 smartcache.slots_for(events, now, rel))):
-            due.append((path, 'full'))
-            continue
-        interval, _ = smartcache.live_plan(path, events, now, rel)
-        if interval and now >= meta.get('live_at', 0) + interval:
-            due.append((path, 'live'))
-    return due
+        with _poll_lock:
+            plan = _plan_for(path, settings)
+            if plan.mode:
+                _poll_league(path, settings, plan.mode, plan.dates)
 
 
 def _refresh_espn_cache(settings=None):
@@ -950,21 +986,48 @@ def _refresh_espn_cache(settings=None):
     settings = settings or get_settings()
     ok = 0
     for path in _poll_paths(settings):
-        ok += bool(_poll_league(path, settings, 'full'))
+        with _poll_lock:
+            ok += bool(_poll_league(path, settings, 'full'))
     print(f"[cache] Refreshed {ok} leagues")
 
 
 def _get_league_events(path, league_conferences):
     _requested[path] = time_module.time()
     if path in league_conferences:
-        _requested_conf[path] = league_conferences[path]
+        _requested_conf.setdefault(path, league_conferences[path])
     with _cache_lock:
         cached = _espn_cache["raw_events"].get(path)
     if cached is not None:
         return cached
-    _poll_league(path, get_settings(), 'full')        # first sight of this league
+    with _poll_lock:                                  # first sight of this league
+        with _cache_lock:
+            cached = _espn_cache["raw_events"].get(path)
+        if cached is None:
+            settings = get_settings()
+            if _plan_for(path, settings).mode:        # respects the failure backoff
+                _poll_league(path, settings, 'full')
     with _cache_lock:
         return _espn_cache["raw_events"].get(path) or []
+
+
+def _mark_stale(path, events, tz_str):
+    """A game left 'in progress' that we are no longer polling (not a favourite's) shows
+    when its score was read instead of pretending to be live."""
+    checked = _league_meta.get(path, {}).get('checked_at')
+    limit = 2 * smartcache.SLOW_LEAGUES.get(path, (600, None))[0]
+    if not checked or time_module.time() - checked < max(limit, 600):
+        return events
+    try:
+        when = datetime.fromtimestamp(checked, pytz.timezone(tz_str)).strftime('%-I:%M %p')
+    except Exception:
+        return events
+    out = []
+    for e in events:
+        if smartcache.event_state(e) == 'in':
+            status = e['status']
+            e = {**e, 'status': {**status, 'type': {**status['type'], 'shortDetail': f"as of {when}"}}}
+        out.append(e)
+    return out
 
 
 import xml.etree.ElementTree as _ET
@@ -1240,12 +1303,12 @@ def _fetch_teams(path):
     cached = _kv.get(key, TEAMS_TTL)
     if cached is not None:
         return cached
-    if _kv.get(key + ':fail', FAIL_COOLDOWN) is not None:
+    if _kv.get(key + ':fail', TEAMS_FAIL_COOLDOWN) is not None:
         return _kv.get(key) or []
     sport, league = ESPN_API_PATHS.get(path, (path.split('/')[0], path.split('/')[-1]))
     host = "site.web.api.espn.com" if path in ESPN_WEB_API_LEAGUES else "site.api.espn.com"
     try:
-        res = requests.get(f"https://{host}/apis/site/v2/sports/{sport}/{league}/teams?limit=1000", timeout=8)
+        res = _espn_get(f"https://{host}/apis/site/v2/sports/{sport}/{league}/teams?limit=1000", 'teams')
         if res.ok:
             leagues = (res.json().get('sports') or [{}])[0].get('leagues') or [{}]
             teams = []
@@ -1793,7 +1856,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
 
     for path in active_leagues:
         try:
-            events = _get_league_events(path, active_lc)
+            events = _mark_stale(path, _get_league_events(path, active_lc), tz_str)
             sport, league = ESPN_API_PATHS.get(path, (path.split('/')[0], path.split('/')[-1]))
 
             # ── Motorsports (NASCAR / IndyCar / F1) — leaderboard + ticker on race day ──
@@ -2075,6 +2138,7 @@ def _build_data_response(active_leagues, active_teams, active_lc, tz_str, settin
         "slide_playlist": settings.get('slide_playlist', []),
         "slide_duration": settings.get('slide_duration', 8),
         "slide_transition": settings.get('slide_transition', 'slide-right'),
+        "transition_seconds": settings.get('transition_seconds', 0.8),
         "ticker_speed": settings.get('ticker_speed', 120),
         "cache_updated_at": _espn_cache.get("updated_at"),
         "settings_updated_at": settings.get('last_saved', ''),
@@ -2240,6 +2304,42 @@ def conferences_api(league_path):
     return jsonify([])
 
 
+SERVER_DATA_FILE = os.path.join(CACHE_DIR, 'server_data.json')
+SERVER_DATA_MAX_AGE = 24 * 3600
+_server_data_saved = [0.0]
+
+
+def _save_server_data(data):
+    """Kiosk: keep the last good server answer on disk (at most every 5 minutes)."""
+    if time_module.time() - _server_data_saved[0] >= smartcache.DISK_WRITE_MIN_GAP:
+        _server_data_saved[0] = time_module.time()
+        smartcache.save_json(SERVER_DATA_FILE, {"at": time_module.time(), "data": data})
+
+
+def _apply_kiosk_overrides(data, settings, tz_str):
+    """Lay this kiosk's own display preferences over the server's data."""
+    data = dict(data)
+    kiosk_colors, kiosk_header = resolve_palette(settings)
+    data['header_color'] = kiosk_header
+    data['colors'] = kiosk_colors
+    for key, fallback in (('display_name', 'SCOREBOARD'), ('cast_orientation', 'auto'),
+                          ('theme', 'dark'), ('color_mode', 'auto'), ('palette_team', ''),
+                          ('font_primary', 'Barlow Condensed'), ('slide_transition', 'slide-right'),
+                          ('slide_duration', 8), ('transition_seconds', 0.8)):
+        data[key] = settings.get(key, data.get(key, fallback))
+    data['specials'] = [
+        s for s in settings.get('specials', [])
+        if s.get('enabled') and (s.get('title') or s.get('image'))
+        and _special_active_today(s, tz_str)
+    ]
+    if settings.get('city'):
+        data['weather'] = get_weather(settings['city'])
+    data['local_schedule_items'] = _build_local_schedule_items(settings, tz_str)
+    # Reload the screen when either the server's or this kiosk's settings change
+    data['settings_updated_at'] = f"{data.get('settings_updated_at', '')}|{settings.get('last_saved', '')}"
+    return data
+
+
 @app.route('/api/data', methods=['GET', 'POST'])
 def data_api():
     settings = get_settings()
@@ -2260,28 +2360,15 @@ def data_api():
                 r = requests.post(f"{server_url}/api/data", json=payload, timeout=10)
                 if r.ok:
                     data = r.json()
-                    # Override server's display settings with this kiosk's own preferences
-                    kiosk_colors, kiosk_header = resolve_palette(settings)
-                    data['display_name']     = settings.get('display_name', data.get('display_name', 'SCOREBOARD'))
-                    data['header_color']     = kiosk_header
-                    data['cast_orientation'] = settings.get('cast_orientation', data.get('cast_orientation', 'auto'))
-                    data['theme']            = settings.get('theme', data.get('theme', 'dark'))
-                    data['colors']           = kiosk_colors
-                    data['color_mode']       = settings.get('color_mode', data.get('color_mode', 'auto'))
-                    data['palette_team']     = settings.get('palette_team', data.get('palette_team', ''))
-                    data['font_primary']     = settings.get('font_primary', data.get('font_primary', 'Barlow Condensed'))
-                    data['specials']         = [
-                        s for s in settings.get('specials', [])
-                        if s.get('enabled') and (s.get('title') or s.get('image'))
-                        and _special_active_today(s, tz_str)
-                    ]
-                    if settings.get('city'):
-                        data['weather'] = get_weather(settings['city'])
-                    data['local_schedule_items'] = _build_local_schedule_items(settings, tz_str)
-                    return jsonify(data)
+                    _save_server_data(data)
+                    return jsonify(_apply_kiosk_overrides(data, settings, tz_str))
             except Exception:
                 pass
-        # Fall through to standalone if server is unreachable
+        if server_url:
+            saved = smartcache.load_json(SERVER_DATA_FILE, None)
+            if saved and time_module.time() - saved.get('at', 0) < SERVER_DATA_MAX_AGE:
+                return jsonify(_apply_kiosk_overrides(saved['data'], settings, tz_str))
+        # Server unreachable for a long time and nothing saved: go standalone
 
     # Server mode (or kiosk fallback to direct ESPN)
     req_data = {}
@@ -2292,6 +2379,9 @@ def data_api():
     active_teams   = req_data['teams']   if req_data.get('teams')   is not None else settings.get('teams', [])
     active_lc      = req_data.get('league_conferences') or settings.get('league_conferences', {})
     active_tz      = req_data.get('timezone', tz_str)
+    for team in req_data.get('teams') or []:
+        if isinstance(team, str):
+            _requested_teams[team] = time_module.time()
 
     return jsonify(_build_data_response(active_leagues, active_teams, active_lc, active_tz, settings))
 
@@ -2334,26 +2424,28 @@ def resolve_feed_api():
 @require_admin
 def cache_status_api():
     settings = get_settings()
-    now = time_module.time()
-    leagues = {}
     with _cache_lock:
         cached = {p: len(v) for p, v in _espn_cache["raw_events"].items()}
+    tracked = _poll_paths(settings)
+    leagues = {}
     for path, count in cached.items():
         meta = _league_meta.get(path, {})
-        events = _espn_cache["raw_events"].get(path)
-        interval, wake = smartcache.live_plan(path, events, now, _relevance(path, settings))
+        plan = _plan_for(path, settings) if path in tracked else None
         leagues[path] = {
+            "label": LEAGUE_LABELS.get(path, path),
             "events": count,
             "full_at": meta.get('full_at'),
-            "live_at": meta.get('live_at'),
+            "checked_at": meta.get('checked_at'),
             "fails": meta.get('fails', 0),
-            "live_poll_seconds": interval,                 # null = idle, nothing being polled
-            "next_game_poll_at": wake,
+            "state": plan.reason if plan else "not tracked",
+            "next_check_at": plan.next_due if plan else None,
         }
     return jsonify({
         "updated_at": _espn_cache.get("updated_at"),
         "leagues_cached": list(cached.keys()),
         "leagues": leagues,
+        "usage": meter.snapshot(),
+        "paused_until": meter.paused_until(),
     })
 
 
@@ -3460,13 +3552,11 @@ def _schedule_loop():
 
 def _cache_refresh_loop():
     """Wake every few seconds, but only touch the network when a league is actually due
-    (see _due_polls). Idle leagues cost nothing between schedule checks."""
+    (see smartcache.plan_league). Idle leagues cost nothing between nightly grabs."""
     _load_disk_cache()
     while True:
         try:
-            settings = get_settings()
-            for path, mode in _due_polls(settings):
-                _poll_league(path, settings, mode)
+            _poll_once()
         except Exception as e:
             print(f"Cache refresh loop error: {e}")
         _refresh_wakeup.wait(timeout=10)

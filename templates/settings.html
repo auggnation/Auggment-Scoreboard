@@ -14,560 +14,23 @@
     </div>
 </header>
 
-<div class="container">
+<div class="status-strip">
+    <button type="button" onclick="showPage('updates')"><small>ESPN requests today</small><b id="strip-usage">—</b></button>
+    <button type="button" onclick="showPage('updates')"><small>Live now</small><b id="strip-live">—</b></button>
+    <button type="button" onclick="showPage('updates')"><small>Next check</small><b id="strip-next">—</b></button>
+</div>
 
-    <div class="section-pair">
-
-    <!-- ── Device Mode ── -->
-    <div class="section section-compact">
-        <div class="section-title">Device Mode</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:18px;">
-            Choose whether this device is the central data server or a display kiosk. Save after changing modes.
-        </p>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            <button class="mode-btn" data-mode="server" onclick="setMode('server')">
-                SERVER
-                <span style="display:block;font-size:12px;font-weight:400;letter-spacing:0;opacity:0.7;margin-top:4px;">Download &amp; serve scores</span>
-            </button>
-            <button class="mode-btn" data-mode="kiosk" onclick="setMode('kiosk')">
-                KIOSK
-                <span style="display:block;font-size:12px;font-weight:400;letter-spacing:0;opacity:0.7;margin-top:4px;">Display from a server</span>
-            </button>
-        </div>
-    </div>
-
-
-    <!-- ── Server Options (server mode only) ── -->
-    <div class="section server-only" id="server-options-section">
-        <div class="section-title">Server Options</div>
-
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">
-            <input type="checkbox" id="server_enable_display" style="width:20px;height:20px;cursor:pointer;accent-color:var(--accent);">
-            <label style="margin:0;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;cursor:pointer;" for="server_enable_display">
-                Show scoreboard display on this server
-            </label>
-        </div>
-        <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:20px;">
-            Uncheck to run this device as a data-only backend — no scoreboard will be shown here.
-        </p>
-
-        <!-- Cache Status -->
-        <div class="info-box">
-            <div class="info-box-title">DATA CACHE</div>
-            <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:8px;">
-                Sports scores are downloaded every 11 minutes in the background.
-            </p>
-            <div id="cache-status-text" style="font-size:14px;font-family:'Barlow',sans-serif;color:#555;">Last updated: —</div>
-            <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
-                <button class="btn" style="background:#1a1a1a;color:var(--accent);border:1px solid #333;font-size:15px;padding:8px 18px;" onclick="refreshCacheStatus()">CHECK STATUS</button>
-                <button id="force-refresh-btn" class="btn" style="background:#001a07;color:#00E676;border:1px solid #00E676;font-size:15px;padding:8px 18px;" onclick="forceRefreshCache()">FORCE REFRESH</button>
-            </div>
-        </div>
-
-        <!-- Pairing Code -->
-        <div class="info-box">
-            <div class="info-box-title">KIOSK PAIRING</div>
-            <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:12px;">
-                Generate a one-time code to authorize a kiosk to connect. Expires in 10 minutes, single use only.
-            </p>
-            <button class="btn btn-save" style="font-size:16px;padding:10px 22px;" onclick="generatePairingCode()">GENERATE PAIRING CODE</button>
-            <div id="pairing-code-display" style="display:none;">
-                <div class="pairing-code-box">
-                    <div style="font-size:13px;color:#666;font-family:'Barlow',sans-serif;letter-spacing:1px;margin-bottom:8px;">ONE-TIME PAIRING CODE</div>
-                    <div id="pairing-code-value" class="pairing-code-value"></div>
-                    <div id="pairing-code-expires" style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-top:8px;"></div>
-                </div>
-                <p id="pairing-code-timer" style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;text-align:center;"></p>
-            </div>
-        </div>
-
-        <!-- Connected Kiosks -->
-        <div>
-            <div style="font-size:15px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">CONNECTED KIOSKS</div>
-            <div id="kiosks-list"><p style="color:#444;font-family:'Barlow',sans-serif;font-size:14px;">Loading…</p></div>
-            <button class="btn" style="margin-top:10px;background:#1a1a1a;color:#888;border:1px solid #333;font-size:15px;padding:8px 18px;" onclick="loadKiosks()">REFRESH</button>
-        </div>
-    </div>
-
-
-    <!-- ── Kiosk Setup (kiosk mode only) ── -->
-    <div class="section kiosk-only" id="kiosk-setup-section" style="display:none;flex:1">
-        <div class="section-title">Kiosk Setup</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
-            Connect this kiosk to a Scoreboard server. You need a pairing code generated from the server's settings page.
-        </p>
-
-        <!-- Connection status -->
-        <div class="info-box" id="kiosk-status-box">
-            <div class="info-box-title">CONNECTION STATUS</div>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                <span id="kiosk-conn-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;flex-shrink:0;"></span>
-                <span id="kiosk-conn-text" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">NOT CONNECTED</span>
-            </div>
-            <div id="kiosk-server-name" style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;"></div>
-            <button class="btn" id="kiosk-disconnect-btn" style="display:none;margin-top:10px;background:#FF1744;color:white;font-size:14px;padding:8px 18px;" onclick="disconnectKiosk()">DISCONNECT</button>
-        </div>
-
-        <!-- Connect form -->
-        <div id="kiosk-connect-form">
-            <label>Kiosk Name</label>
-            <input type="text" id="kiosk_name_input" placeholder="Display 1">
-
-            <label>Server URL</label>
-            <input type="text" id="server_url_input" placeholder="http://192.168.1.100:5000">
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:4px;">
-                Include <code style="color:#aaa">http://</code> and the port (default 5000).
-            </p>
-
-            <label>Pairing Code</label>
-            <input type="text" id="pairing_code_input" placeholder="ABC123" maxlength="6"
-                   style="text-transform:uppercase;letter-spacing:6px;font-size:28px;font-weight:900;"
-                   oninput="this.value=this.value.toUpperCase()">
-
-            <div style="margin-top:18px;display:flex;gap:12px;align-items:center;">
-                <button class="btn btn-save" style="font-size:16px;padding:10px 22px;" onclick="connectKiosk()">CONNECT TO SERVER</button>
-                <span id="kiosk-connect-msg" style="font-size:15px;font-family:'Barlow',sans-serif;color:#555;"></span>
-            </div>
-        </div>
-    </div>
-
-
-    </div><!-- /section-pair: Device Mode + Server/Kiosk -->
-
-    <!-- ── Display Settings ── -->
-    <div class="section">
-        <div class="section-title">Display Settings</div>
-        <div class="row">
-            <div>
-                <label>Scoreboard Name</label>
-                <input type="text" id="display_name" placeholder="Scoreboard">
-            </div>
-            <div>
-                <label>City (for weather)</label>
-                <input type="text" id="city" placeholder="Auburn, NE">
-            </div>
-        </div>
-        <div class="row" style="margin-top:16px;">
-            <div>
-                <label>Timezone</label>
-                <select id="timezone">
-                    <option value="America/New_York">Eastern</option>
-                    <option value="America/Chicago" selected>Central</option>
-                    <option value="America/Denver">Mountain</option>
-                    <option value="America/Los_Angeles">Pacific</option>
-                    <option value="America/Anchorage">Alaska</option>
-                    <option value="Pacific/Honolulu">Hawaii</option>
-                </select>
-            </div>
-        </div>
-
-        <div style="margin-top:24px;">
-            <label style="margin-bottom:10px;">Orientation</label>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                <button class="sp-toggle-btn orient-btn active" data-val="auto" style="text-align:center;">
-                    AUTO<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">Detect screen</span>
-                </button>
-                <button class="sp-toggle-btn orient-btn" data-val="horizontal" style="text-align:center;">
-                    HORIZONTAL<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">TV landscape 1920×1080</span>
-                </button>
-                <button class="sp-toggle-btn orient-btn" data-val="vertical" style="text-align:center;">
-                    VERTICAL<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">TV portrait 1080×1920</span>
-                </button>
-                <button class="sp-toggle-btn orient-btn" data-val="phone" style="text-align:center;">
-                    PHONE<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">Mobile browser</span>
-                </button>
-            </div>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">
-                Vertical and Phone both put the away team on top.
-            </p>
-        </div>
-
-        <div style="margin-top:24px;">
-            <label style="margin-bottom:12px;">Theme</label>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <button class="theme-btn" data-val="dark">🌙 DARK</button>
-                <button class="theme-btn" data-val="light">☀️ LIGHT</button>
-            </div>
-        </div>
-
-        <div style="margin-top:24px;">
-            <label style="margin-bottom:10px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Display Font</label>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;" id="font-picker">
-                <button class="sp-toggle-btn font-btn active" data-font="Barlow Condensed">Barlow Condensed</button>
-                <button class="sp-toggle-btn font-btn" data-font="Bebas Neue">Bebas Neue</button>
-                <button class="sp-toggle-btn font-btn" data-font="Oswald">Oswald</button>
-                <button class="sp-toggle-btn font-btn" data-font="Roboto Condensed">Roboto Condensed</button>
-                <button class="sp-toggle-btn font-btn" data-font="Anton">Anton</button>
-                <button class="sp-toggle-btn font-btn" data-font="Exo 2">Exo 2</button>
-                <button class="sp-toggle-btn font-btn" data-font="Teko">Teko</button>
-                <button class="sp-toggle-btn font-btn" data-font="Saira Condensed">Saira Condensed</button>
-                <button class="sp-toggle-btn font-btn" data-font="Rajdhani">Rajdhani</button>
-                <button class="sp-toggle-btn font-btn" data-font="Syncopate">Syncopate</button>
-            </div>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">Applied to scores, team names, and all headings on the scoreboard.</p>
-        </div>
-
-        <div style="margin-top:28px;">
-            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Color Mode</label>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <button class="cmode-btn" data-val="auto">🎨 AUTO (from favorite team)</button>
-                <button class="cmode-btn" data-val="manual">✋ MANUAL</button>
-            </div>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">
-                Auto builds the background, cards, header and accent colors from your favorite team's official colors.
-                Manual uses the colors you pick below. Live/Final/Flash state colors are always respected.
-            </p>
-            <div id="palette-team-wrap" style="margin-top:16px;">
-                <label style="margin-bottom:6px;font-size:15px;color:#888;font-family:'Barlow',sans-serif;">Palette Team</label>
-                <select id="palette_team" style="width:100%;max-width:420px;"></select>
-                <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:6px;">Which favorite drives the auto palette. Leave as "First favorite" to track whichever team is first.</p>
-            </div>
-        </div>
-
-        <div style="margin-top:28px;">
-            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Header &amp; Info</label>
-            <div class="color-grid">
-                <div class="color-item"><label>Display Name &amp; Clock</label><input type="color" id="header_color" value="#F5A800"></div>
-                <div class="color-item"><label>Weather</label><input type="color" id="color_weather" value="#dddddd"></div>
-            </div>
-        </div>
-
-        <div style="margin-top:22px;">
-            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Game Cards</label>
-            <div class="color-grid">
-                <div class="color-item"><label>League Tag</label><input type="color" id="color_league_label" value="#099afc"></div>
-                <div class="color-item"><label>VS Label</label><input type="color" id="color_vs_color" value="#ffffff"></div>
-                <div class="color-item"><label>Game Time / Date</label><input type="color" id="color_pre_time" value="#ffffff"></div>
-                <div class="color-item"><label>Score Separator ( – )</label><input type="color" id="color_score_sep" value="#888888"></div>
-                <div class="color-item"><label>Live Score</label><input type="color" id="color_live" value="#00E676"></div>
-                <div class="color-item"><label>Final Score</label><input type="color" id="color_final" value="#FF1744"></div>
-                <div class="color-item"><label>Score Update Flash</label><input type="color" id="color_flash" value="#FFD600"></div>
-                <div class="color-item"><label>Winner Score &amp; Name</label><input type="color" id="color_winner" value="#00E676"></div>
-                <div class="color-item"><label>Loser Score &amp; Name</label><input type="color" id="color_loser" value="#FF1744"></div>
-                <div class="color-item"><label>Tied Score</label><input type="color" id="color_tie_score" value="#FFD600"></div>
-                <div class="color-item"><label>Team Abbreviation</label><input type="color" id="color_team_abbr" value="#ffffff"></div>
-                <div class="color-item"><label>Fav Team Name</label><input type="color" id="color_fav_abbr" value="#F5A800"></div>
-                <div class="color-item"><label>Fav Team Score</label><input type="color" id="color_fav_score" value="#F5A800"></div>
-            </div>
-        </div>
-
-        <div style="margin-top:22px;">
-            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Ticker</label>
-            <div class="color-grid">
-                <div class="color-item"><label>Default Text</label><input type="color" id="color_ticker_base" value="#ffffff"></div>
-                <div class="color-item"><label>Live Game Items</label><input type="color" id="color_ticker_live" value="#00E676"></div>
-                <div class="color-item"><label>Final Game Items</label><input type="color" id="color_ticker_final" value="#FF1744"></div>
-                <div class="color-item"><label>Separator ( · ///)</label><input type="color" id="color_ticker_sep" value="#444444"></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap;">
-                <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Ticker Speed</label>
-                <input type="range" id="ticker_speed" min="30" max="400" step="5"
-                       style="flex:1;min-width:200px;accent-color:var(--accent);"
-                       oninput="document.getElementById('ticker_speed_val').textContent = this.value + ' px/s'">
-                <span id="ticker_speed_val" style="font-size:16px;color:#ccc;font-family:'Barlow Condensed',sans-serif;min-width:70px;text-align:right;">120 px/s</span>
-            </div>
-        </div>
-
-        <div style="margin-top:22px;">
-            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Racing &amp; Golf Cards</label>
-            <div class="color-grid">
-                <div class="color-item"><label>Car Number / Strokes</label><input type="color" id="color_nascar_num" value="#FFD600"></div>
-                <div class="color-item"><label>Position (1st, 2nd…)</label><input type="color" id="color_race_pos" value="#F5A800"></div>
-                <div class="color-item"><label>Laps Left / Hole Info</label><input type="color" id="color_race_laps" value="#888888"></div>
-                <div class="color-item"><label>Race / Tournament Name</label><input type="color" id="color_card_subtext" value="#555555"></div>
-            </div>
-        </div>
-
-        <div style="margin-top:28px;">
-            <label style="margin-bottom:4px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">🌙 Dark Mode Surfaces</label>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Background, cards, and borders when dark theme is active.</p>
-            <div class="color-grid">
-                <div class="color-item">
-                    <label>Body Background</label>
-                    <input type="color" id="color_dark_bg" value="#080808">
-                </div>
-                <div class="color-item">
-                    <label>Card Background</label>
-                    <input type="color" id="color_dark_card" value="#111111">
-                </div>
-                <div class="color-item">
-                    <label>Borders &amp; Dividers</label>
-                    <input type="color" id="color_dark_border" value="#2a2a2a">
-                </div>
-                <div class="color-item">
-                    <label>VS / Pre-game Text</label>
-                    <input type="color" id="color_dark_vs" value="#ffffff">
-                </div>
-                <div class="color-item">
-                    <label>Ticker Background</label>
-                    <input type="color" id="color_dark_ticker_bg" value="#000000">
-                </div>
-            </div>
-        </div>
-
-        <div style="margin-top:28px;">
-            <label style="margin-bottom:4px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">☀️ Light Mode Surfaces</label>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Base hue for the frosted-glass background gradient. Cards and header will tint from this.</p>
-            <div class="color-grid">
-                <div class="color-item">
-                    <label>Background Tint</label>
-                    <input type="color" id="color_light_bg" value="#c4d6f0">
-                </div>
-                <div class="color-item">
-                    <label>Card / Glass Tint</label>
-                    <input type="color" id="color_light_card" value="#ffffff">
-                </div>
-                <div class="color-item">
-                    <label>Border / Glow</label>
-                    <input type="color" id="color_light_border" value="#ffffff">
-                </div>
-                <div class="color-item">
-                    <label>VS / Pre-game Text</label>
-                    <input type="color" id="color_light_vs" value="#445566">
-                </div>
-            </div>
-        </div>
-
-        <div style="margin-top:28px;">
-            <label style="margin-bottom:4px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Element Colors</label>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Everything else on the scoreboard — headers, borders, ticker, RSS/local slides and specials.</p>
-            <div class="color-grid">
-                <div class="color-item"><label>Header Background (Dark)</label><input type="color" id="color_header_bg_dark" value="#080808"></div>
-                <div class="color-item"><label>Header Background (Light)</label><input type="color" id="color_header_bg_light" value="#eef2f8"></div>
-                <div class="color-item"><label>Header Border</label><input type="color" id="color_header_border" value="#2a2a2a"></div>
-                <div class="color-item"><label>Card Border (Pre-game)</label><input type="color" id="color_card_border" value="#ffffff"></div>
-                <div class="color-item"><label>Logo Glow</label><input type="color" id="color_logo_glow" value="#ffffff"></div>
-                <div class="color-item"><label>Ticker Top Border</label><input type="color" id="color_ticker_border" value="#099afc"></div>
-                <div class="color-item"><label>Final Badge Text</label><input type="color" id="color_final_badge_text" value="#ffffff"></div>
-                <div class="color-item"><label>RSS / Local Label</label><input type="color" id="color_rss_label" value="#ffffff"></div>
-                <div class="color-item"><label>RSS / Local Event</label><input type="color" id="color_rss_event" value="#ffffff"></div>
-                <div class="color-item"><label>RSS / Local Sub-text</label><input type="color" id="color_rss_subevent" value="#888888"></div>
-                <div class="color-item"><label>Special Body Text</label><input type="color" id="color_special_text" value="#cccccc"></div>
-                <div class="color-item"><label>Golf Position</label><input type="color" id="color_golf_pos" value="#F5A800"></div>
-                <div class="color-item"><label>Race Event Name</label><input type="color" id="color_race_event" value="#666666"></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:14px;">
-                <input type="checkbox" id="ticker_border_cycle" style="width:20px;height:20px;cursor:pointer;accent-color:var(--accent);">
-                <label for="ticker_border_cycle" style="margin:0;font-size:16px;font-weight:700;letter-spacing:1px;color:#ccc;cursor:pointer;">Cycle ticker border colors (burn-in prevention)</label>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="section-pair">
-
-    <!-- ── Logo ── -->
-    <div class="section section-compact">
-        <div class="section-title">Logo</div>
-        <div id="logo-preview-wrap" style="text-align:center;margin-bottom:12px;min-height:80px;">
-            <img id="logo-preview" src="/static/uploads/logo.png" alt="Current logo"
-                 style="max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;border:1px solid #2a2a2a;background:#000;padding:8px;"
-                 onerror="this.style.display='none';document.getElementById('logo-none-msg').style.display='block';">
-            <p id="logo-none-msg" style="display:none;color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin:0;">No logo uploaded yet.</p>
-        </div>
-        <div class="upload-area" onclick="document.getElementById('logo-input').click()">
-            <p>Click to upload logo (PNG recommended)</p>
-        </div>
-        <input type="file" id="logo-input" accept="image/*" style="display:none" onchange="uploadLogo(this)">
-        <p id="upload-status" style="color:#555;margin-top:10px;font-family:'Barlow',sans-serif;font-size:15px;"></p>
-    </div>
-
-
-    <!-- ── Specials ── -->
-    <div class="section">
-        <div class="section-title">Specials / Custom Slides</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
-            Custom slides shown between score cards. Drag to set order.
-        </p>
-        <div id="specials-list"></div>
-        <button class="btn btn-save" style="margin-top:14px;background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);" onclick="addSpecial()">+ ADD SPECIAL</button>
-    </div>
-
-
-    </div><!-- /section-pair: Logo + Specials -->
-
-
-    <!-- ── Slide Order ── -->
-    <div class="section" id="slide-order-section">
-        <div class="section-title">Slide Order</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">
-            Drag to set the exact order every slide appears on screen. Sport cards only show when that team/driver/golfer has an active event.
-        </p>
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
-            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Each slide shows for</label>
-            <input type="number" id="slide_duration" min="2" max="120" step="1"
-                   style="width:72px;padding:8px 10px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:8px;font-size:18px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;">
-            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">seconds</label>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;flex-shrink:0;">Transition</label>
-            <button class="trans-btn" data-val="slide-right" onclick="setTransition('slide-right')">→ FROM RIGHT</button>
-            <button class="trans-btn" data-val="slide-left"  onclick="setTransition('slide-left')">← FROM LEFT</button>
-            <button class="trans-btn" data-val="slide-top"   onclick="setTransition('slide-top')">↑ FROM TOP</button>
-            <button class="trans-btn" data-val="slide-bottom" onclick="setTransition('slide-bottom')">↓ FROM BELOW</button>
-            <button class="trans-btn" data-val="fade"        onclick="setTransition('fade')">◎ FADE</button>
-        </div>
-        <div id="playlist-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-        <p style="color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin-top:10px;">
-            Favorites and custom slides are added here automatically. Remove from their respective sections to take them out of the rotation.
-        </p>
-    </div>
-
-
-    <div class="section-pair">
-
-    <!-- ── Favorite Teams ── -->
-    <div class="section" style="flex:1;min-width:300px;">
-        <div class="section-title">Favorite Teams (Score Cards)</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">Select a league to browse teams. Click to add/remove.</p>
-        <select id="team-league-select" onchange="loadTeams(this.value)">
-            <option value="">— Pick a league —</option>
-            <option value="football/nfl">NFL</option>
-            <option value="football/cfl">CFL</option>
-            <option value="football/xfl">XFL</option>
-            <option value="baseball/mlb">MLB</option>
-            <option value="basketball/nba">NBA</option>
-            <option value="basketball/wnba">WNBA</option>
-            <option value="basketball/euroleague">EuroLeague</option>
-            <option value="hockey/nhl">NHL</option>
-            <option value="hockey/mens-college-hockey">NCAA Hockey</option>
-            <option value="soccer/usa.1">MLS</option>
-            <option value="soccer/usa.nwsl">NWSL</option>
-            <option value="soccer/eng.1">EPL</option>
-            <option value="soccer/eng.2">EFL Champ</option>
-            <option value="soccer/eng.3">League One</option>
-            <option value="soccer/eng.4">League Two</option>
-            <option value="soccer/esp.1">La Liga</option>
-            <option value="soccer/esp.2">La Liga 2</option>
-            <option value="soccer/ger.1">Bundesliga</option>
-            <option value="soccer/ger.2">2. Bundesliga</option>
-            <option value="soccer/ita.1">Serie A</option>
-            <option value="soccer/ita.2">Serie B</option>
-            <option value="soccer/fra.1">Ligue 1</option>
-            <option value="soccer/fra.2">Ligue 2</option>
-            <option value="soccer/ned.1">Eredivisie</option>
-            <option value="soccer/por.1">Liga Portugal</option>
-            <option value="soccer/sco.1">Scottish Premiership</option>
-            <option value="soccer/mex.1">Liga MX</option>
-            <option value="soccer/bra.1">Brasileirão</option>
-            <option value="soccer/arg.1">LPF Argentina</option>
-            <option value="soccer/tur.1">Süper Lig</option>
-            <option value="soccer/gre.1">Greek Super League</option>
-            <option value="soccer/uefa.champions">UEFA Champions League</option>
-            <option value="soccer/uefa.europa">UEFA Europa League</option>
-            <option value="soccer/uefa.europa.conf">UEFA Conference League</option>
-            <option value="football/college-football">CFB</option>
-            <option value="basketball/mens-college-basketball">CBK</option>
-            <option value="basketball/womens-college-basketball">WCBK</option>
-            <option value="baseball/college-baseball">CBB</option>
-            <option value="softball/college-softball">CSB</option>
-            <option value="volleyball/womens-college-volleyball">CVB</option>
-            <option value="volleyball/mens-college-volleyball">NCAA Men's Volleyball</option>
-            <option value="lacrosse/mens-college-lacrosse">NCAA Men's Lacrosse</option>
-            <option value="lacrosse/womens-college-lacrosse">NCAA Women's Lacrosse</option>
-            <option value="soccer/usa.usl.1">USL Championship</option>
-            <option value="soccer/usa.usl.l1">USL League One</option>
-            <option value="baseball/milb">MiLB</option>
-            <option value="soccer/fifa.world">World Cup</option>
-            <option value="soccer/fifa.worldq">WC Qualifiers</option>
-            <option value="soccer/fifa.wwc">Women's WC</option>
-            <option value="lacrosse/pll">PLL</option>
-            <option value="lacrosse/nll">NLL</option>
-            <option value="cricket/current">Cricket</option>
-            <option value="cricket/8039">BBL</option>
-            <option value="cricket/8048">IPL</option>
-            <option value="cricket/8052">County</option>
-            <option value="cricket/8623">CPL</option>
-            <option value="rugby/267979">Prem Rugby</option>
-            <option value="rugby/270559">Top 14</option>
-            <option value="rugby/180659">6 Nations</option>
-            <option value="rugby/270557">URC</option>
-            <option value="rugby/242041">Super Rugby</option>
-            <option value="rugby/289234">Rugby Tests</option>
-            <option value="rugby/289262">MLR</option>
-        </select>
-        <div id="team-list"><p style="color:#444;font-family:'Barlow',sans-serif;">Select a league above.</p></div>
-        <div id="fav-list"></div>
-    </div>
-
-    <!-- ── Event Windows ── -->
-    <div class="section" id="event-windows-section" style="flex:0 0 auto;min-width:260px;max-width:380px;">
-        <div class="section-title">Event Windows</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;">
-            Days of past scores and upcoming events per league.
-        </p>
-        <div id="event-windows-grid" style="display:flex;flex-direction:column;gap:6px;"></div>
-    </div>
-
-    </div><!-- /section-pair: Favorite Teams + Event Windows -->
-
-
-    <!-- ── Favorite NASCAR Drivers ── -->
-    <div class="section" id="nascar-fav-section">
-        <div class="section-title">Favorite NASCAR Drivers</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
-            Add drivers by name or car number. They will be highlighted in the NASCAR leaderboard and shown even if outside top 10.
-        </p>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="nascar-fav-input" placeholder="e.g. Denny Hamlin or 11"
-                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
-                   onkeydown="if(event.key==='Enter')addNascarFavorite()">
-            <button onclick="addNascarFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
-        </div>
-        <div id="nascar-fav-list" style="margin-top:14px;"></div>
-    </div>
-
-
-    <!-- ── Favorite IndyCar Drivers ── -->
-    <div class="section" id="indycar-fav-section">
-        <div class="section-title">Favorite IndyCar Drivers</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
-            Add drivers by name or car number. Highlighted in the IndyCar leaderboard and shown even if outside top 10.
-        </p>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="indycar-fav-input" placeholder="e.g. Scott Dixon or 9"
-                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
-                   onkeydown="if(event.key==='Enter')addIndycarFavorite()">
-            <button onclick="addIndycarFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
-        </div>
-        <div id="indycar-fav-list" style="margin-top:14px;"></div>
-    </div>
-
-
-    <!-- ── Favorite F1 Drivers ── -->
-    <div class="section" id="f1-fav-section">
-        <div class="section-title">Favorite F1 Drivers</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
-            Add drivers by name or car number. Highlighted in the F1 leaderboard and shown even if outside top 10.
-        </p>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="f1-fav-input" placeholder="e.g. Max Verstappen or 1"
-                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
-                   onkeydown="if(event.key==='Enter')addF1Favorite()">
-            <button onclick="addF1Favorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
-        </div>
-        <div id="f1-fav-list" style="margin-top:14px;"></div>
-    </div>
-
-
-    <!-- ── Favorite Golfers ── -->
-    <div class="section" id="golf-fav-section">
-        <div class="section-title">Favorite Golfers (PGA)</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
-            Add golfer names to highlight them in the PGA leaderboard. Requires PGA enabled in Leagues above.
-        </p>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="golf-fav-input" placeholder="e.g. Rory McIlroy"
-                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
-                   onkeydown="if(event.key==='Enter')addGolfFavorite()">
-            <button onclick="addGolfFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
-        </div>
-        <div id="golf-fav-list" style="margin-top:14px;"></div>
-    </div>
-
-
-    <!-- ── Leagues ── -->
-    <div class="section">
+<div class="settings-shell">
+    <nav class="rail" aria-label="Settings sections">
+        <button type="button" class="rail-btn" data-page="games" onclick="showPage('games')">Games<small>What to follow</small></button>
+        <button type="button" class="rail-btn" data-page="updates" onclick="showPage('updates')">Updates<small>ESPN &amp; timing</small></button>
+        <button type="button" class="rail-btn" data-page="screen" onclick="showPage('screen')">Screen<small>Slides &amp; motion</small></button>
+        <button type="button" class="rail-btn" data-page="look" onclick="showPage('look')">Look<small>Theme &amp; color</small></button>
+        <button type="button" class="rail-btn" data-page="device" onclick="showPage('device')">Device<small>Network &amp; system</small></button>
+    </nav>
+    <main class="pages">
+    <section class="page" data-page="games" aria-label="Games" hidden>
+<div class="section">
         <div class="section-title">Leagues (Ticker)</div>
         <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;" id="leagues-note"></p>
         <div class="league-grid" id="league-grid">
@@ -643,9 +106,136 @@
         </div>
     </div>
 
+<div class="section">
+        <div class="section-title">Favorite Teams (Score Cards)</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">Select a league to browse teams. Click to add/remove.</p>
+        <select id="team-league-select" onchange="loadTeams(this.value)">
+            <option value="">— Pick a league —</option>
+            <option value="football/nfl">NFL</option>
+            <option value="football/cfl">CFL</option>
+            <option value="football/xfl">XFL</option>
+            <option value="baseball/mlb">MLB</option>
+            <option value="basketball/nba">NBA</option>
+            <option value="basketball/wnba">WNBA</option>
+            <option value="basketball/euroleague">EuroLeague</option>
+            <option value="hockey/nhl">NHL</option>
+            <option value="hockey/mens-college-hockey">NCAA Hockey</option>
+            <option value="soccer/usa.1">MLS</option>
+            <option value="soccer/usa.nwsl">NWSL</option>
+            <option value="soccer/eng.1">EPL</option>
+            <option value="soccer/eng.2">EFL Champ</option>
+            <option value="soccer/eng.3">League One</option>
+            <option value="soccer/eng.4">League Two</option>
+            <option value="soccer/esp.1">La Liga</option>
+            <option value="soccer/esp.2">La Liga 2</option>
+            <option value="soccer/ger.1">Bundesliga</option>
+            <option value="soccer/ger.2">2. Bundesliga</option>
+            <option value="soccer/ita.1">Serie A</option>
+            <option value="soccer/ita.2">Serie B</option>
+            <option value="soccer/fra.1">Ligue 1</option>
+            <option value="soccer/fra.2">Ligue 2</option>
+            <option value="soccer/ned.1">Eredivisie</option>
+            <option value="soccer/por.1">Liga Portugal</option>
+            <option value="soccer/sco.1">Scottish Premiership</option>
+            <option value="soccer/mex.1">Liga MX</option>
+            <option value="soccer/bra.1">Brasileirão</option>
+            <option value="soccer/arg.1">LPF Argentina</option>
+            <option value="soccer/tur.1">Süper Lig</option>
+            <option value="soccer/gre.1">Greek Super League</option>
+            <option value="soccer/uefa.champions">UEFA Champions League</option>
+            <option value="soccer/uefa.europa">UEFA Europa League</option>
+            <option value="soccer/uefa.europa.conf">UEFA Conference League</option>
+            <option value="football/college-football">CFB</option>
+            <option value="basketball/mens-college-basketball">CBK</option>
+            <option value="basketball/womens-college-basketball">WCBK</option>
+            <option value="baseball/college-baseball">CBB</option>
+            <option value="softball/college-softball">CSB</option>
+            <option value="volleyball/womens-college-volleyball">CVB</option>
+            <option value="volleyball/mens-college-volleyball">NCAA Men's Volleyball</option>
+            <option value="lacrosse/mens-college-lacrosse">NCAA Men's Lacrosse</option>
+            <option value="lacrosse/womens-college-lacrosse">NCAA Women's Lacrosse</option>
+            <option value="soccer/usa.usl.1">USL Championship</option>
+            <option value="soccer/usa.usl.l1">USL League One</option>
+            <option value="baseball/milb">MiLB</option>
+            <option value="soccer/fifa.world">World Cup</option>
+            <option value="soccer/fifa.worldq">WC Qualifiers</option>
+            <option value="soccer/fifa.wwc">Women's WC</option>
+            <option value="lacrosse/pll">PLL</option>
+            <option value="lacrosse/nll">NLL</option>
+            <option value="cricket/current">Cricket</option>
+            <option value="cricket/8039">BBL</option>
+            <option value="cricket/8048">IPL</option>
+            <option value="cricket/8052">County</option>
+            <option value="cricket/8623">CPL</option>
+            <option value="rugby/267979">Prem Rugby</option>
+            <option value="rugby/270559">Top 14</option>
+            <option value="rugby/180659">6 Nations</option>
+            <option value="rugby/270557">URC</option>
+            <option value="rugby/242041">Super Rugby</option>
+            <option value="rugby/289234">Rugby Tests</option>
+            <option value="rugby/289262">MLR</option>
+        </select>
+        <div id="team-list"><p style="color:#444;font-family:'Barlow',sans-serif;">Select a league above.</p></div>
+        <div id="fav-list"></div>
+    </div>
 
-    <!-- ── College Conference Filters ── -->
-    <div class="section" id="conf-section">
+<div class="section" id="nascar-fav-section">
+        <div class="section-title">Favorite NASCAR Drivers</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add drivers by name or car number. They will be highlighted in the NASCAR leaderboard and shown even if outside top 10.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="nascar-fav-input" placeholder="e.g. Denny Hamlin or 11"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addNascarFavorite()">
+            <button onclick="addNascarFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="nascar-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+<div class="section" id="indycar-fav-section">
+        <div class="section-title">Favorite IndyCar Drivers</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add drivers by name or car number. Highlighted in the IndyCar leaderboard and shown even if outside top 10.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="indycar-fav-input" placeholder="e.g. Scott Dixon or 9"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addIndycarFavorite()">
+            <button onclick="addIndycarFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="indycar-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+<div class="section" id="f1-fav-section">
+        <div class="section-title">Favorite F1 Drivers</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add drivers by name or car number. Highlighted in the F1 leaderboard and shown even if outside top 10.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="f1-fav-input" placeholder="e.g. Max Verstappen or 1"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addF1Favorite()">
+            <button onclick="addF1Favorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="f1-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+<div class="section" id="golf-fav-section">
+        <div class="section-title">Favorite Golfers (PGA)</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Add golfer names to highlight them in the PGA leaderboard. Requires PGA enabled in Leagues above.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="golf-fav-input" placeholder="e.g. Rory McIlroy"
+                   style="flex:1;min-width:200px;padding:12px 14px;background:#0a0a0a;border:1px solid #333;color:white;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:18px;outline:none;"
+                   onkeydown="if(event.key==='Enter')addGolfFavorite()">
+            <button onclick="addGolfFavorite()" class="btn btn-save" style="padding:10px 20px;font-size:16px;">+ ADD</button>
+        </div>
+        <div id="golf-fav-list" style="margin-top:14px;"></div>
+    </div>
+
+<div class="section" id="conf-section">
         <div class="section-title">College Conference Filters (Ticker)</div>
         <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
             Select one or more conferences per league to filter the ticker. Select none to show all games.
@@ -654,9 +244,15 @@
         <div class="conf-grid" id="conf-grid"></div>
     </div>
 
+<div class="section" id="event-windows-section">
+        <div class="section-title">Event Windows</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;">
+            Days of past scores and upcoming events per league.
+        </p>
+        <div id="event-windows-grid" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
 
-    <!-- ── Local Schedule ── -->
-    <div class="section">
+<div class="section">
         <div class="section-title">Local Schedule</div>
         <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
             Enter local games (high school, club, etc.) to show as slides and in the ticker — no live scoring. Optionally pull from an RSS feed.
@@ -677,76 +273,453 @@
         <div id="schedule-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
         <button class="btn btn-save" style="background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);" onclick="addScheduleEntry()">+ ADD GAME</button>
     </div>
+    </section>
+    <section class="page" data-page="updates" aria-label="Updates" hidden>
+<div class="section">
+<div class="section-title">How often scores update</div>
 
+        <div class="rules">
+            <div><b>Nightly</b><span>Schedules are read just after midnight. If nothing is happening, that is all for 24 hours.</span></div>
+            <div><b>Game day</b><span>A favorite's game later today is checked every few hours until it starts.</span></div>
+            <div><b>Live</b><span>While that game is on, scores update every minute.</span></div>
+        </div>
+        <p class="hint kiosk-only">This kiosk gets scores from its server. These settings only apply if the server is unreachable for a day; set them on the server.</p>
+        <div class="range-row">
+            <label for="update_interval_idx">Also check today's games every</label>
+            <input type="range" id="update_interval_idx" min="0" max="14" step="1" value="14" oninput="showInterval()">
+            <output id="update_interval_label">24 hours</output>
+        </div>
+        <p class="hint" id="update_interval_help"></p>
 
-    <div class="section-pair">
+        <label>Check during the day for</label>
+        <div class="choice-row">
+            <button type="button" class="sp-toggle-btn scope-btn" data-val="favorites" onclick="setScope('favorites')">MY FAVORITES ONLY</button>
+            <button type="button" class="sp-toggle-btn scope-btn" data-val="all" onclick="setScope('all')">EVERY GAME</button>
+        </div>
+        <p class="hint" id="scope_help"></p>
 
-    <!-- ── Kiosk Control ── -->
-    <div class="section">
-        <div class="section-title">Kiosk Control</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:12px;">
-            Controls the kiosk browser (Chrome). Restart resets a frozen display.
+        <div class="range-row">
+            <label for="daily_api_limit">Never exceed</label>
+            <input type="number" id="daily_api_limit" min="0" max="100000" step="100" value="3000">
+            <span>ESPN requests a day (0 = no limit)</span>
+        </div>
+</div>
+
+<div class="section">
+<div class="section-title">ESPN requests</div>
+
+        <div class="usage-head"><span id="usage-total">—</span><span id="usage-limit"></span></div>
+        <div class="usage-bar"><i id="usage-fill"></i></div>
+        <p class="hint" id="usage-kinds"></p>
+        <div id="usage-history" class="usage-history" aria-label="Requests per day"></div>
+        <div class="table-wrap"><table class="league-table">
+            <thead><tr><th>League</th><th>Now</th><th>Last checked</th><th>Next check</th></tr></thead>
+            <tbody id="league-status-rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+        </table></div>
+        <div id="cache-status-text" class="hint">Last updated: —</div>
+        <div class="choice-row">
+            <button class="btn btn-quiet" onclick="refreshCacheStatus()">CHECK STATUS</button>
+            <button id="force-refresh-btn" class="btn btn-quiet" onclick="forceRefreshCache()">FORCE REFRESH</button>
+        </div>
+        <p class="hint">Force refresh re-reads every league now and counts toward today's total.</p>
+</div>
+    </section>
+    <section class="page" data-page="screen" aria-label="Screen" hidden>
+<div class="section" id="slide-order-section">
+        <div class="section-title">Slide Order</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:14px;">
+            Drag to set the exact order every slide appears on screen. Sport cards only show when that team/driver/golfer has an active event.
         </p>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <button class="btn" onclick="kioskAction('restart')" style="background:var(--accent);color:#000;font-size:16px;padding:10px 22px;">RESET KIOSK</button>
-            <button class="btn" onclick="kioskAction('stop')"    style="background:#FF1744;color:white;font-size:16px;padding:10px 22px;">STOP KIOSK</button>
-            <button class="btn" onclick="kioskAction('start')"   style="background:#00E676;color:#000;font-size:16px;padding:10px 22px;">START KIOSK</button>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Each slide shows for</label>
+            <input type="number" id="slide_duration" min="2" max="120" step="1"
+                   style="width:72px;padding:8px 10px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:8px;font-size:18px;font-family:'Barlow Condensed',sans-serif;outline:none;text-align:center;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">seconds</label>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-            <span style="font-size:14px;color:#555;font-family:'Barlow',sans-serif;">STATUS:</span>
-            <span id="kiosk-status-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;"></span>
-            <span id="kiosk-status-text" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">—</span>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;flex-shrink:0;">Transition</label>
+            <button class="trans-btn" data-val="slide-right" onclick="setTransition('slide-right')">→ FROM RIGHT</button>
+            <button class="trans-btn" data-val="slide-left"  onclick="setTransition('slide-left')">← FROM LEFT</button>
+            <button class="trans-btn" data-val="slide-top"   onclick="setTransition('slide-top')">↑ FROM TOP</button>
+            <button class="trans-btn" data-val="slide-bottom" onclick="setTransition('slide-bottom')">↓ FROM BELOW</button>
+            <button class="trans-btn" data-val="fade"        onclick="setTransition('fade')">◎ FADE</button>
+            <button class="trans-btn" data-val="quick"       onclick="setTransition('quick')">⚡ QUICK SWITCH</button>
         </div>
-        <p id="kiosk-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
+        <div id="quick-switch-row" class="range-row" style="display:none;">
+            <label for="transition_seconds">Switch takes</label>
+            <input type="range" id="transition_seconds" min="0.2" max="1.9" step="0.1" value="0.8"
+                   oninput="document.getElementById('transition_seconds_val').textContent = Number(this.value).toFixed(1) + ' s'">
+            <output id="transition_seconds_val">0.8 s</output>
+        </div>
+        <div id="playlist-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <p style="color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin-top:10px;">
+            Favorites and custom slides are added here automatically. Remove from their respective sections to take them out of the rotation.
+        </p>
+    </div>
 
-        <div style="margin-top:24px;margin-bottom:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
-            <div>
-                <label style="display:block;margin-bottom:6px;">Server Port</label>
-                <input type="number" id="server_port" min="1" max="65535" placeholder="5000" style="width:110px;">
+<div class="section">
+        <div class="section-title">Specials / Custom Slides</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:16px;">
+            Custom slides shown between score cards. Drag to set order.
+        </p>
+        <div id="specials-list"></div>
+        <button class="btn btn-save" style="margin-top:14px;background:#1a1a1a;color:var(--accent);border:1px solid var(--accent);" onclick="addSpecial()">+ ADD SPECIAL</button>
+    </div>
+
+<div class="section">
+        <div class="section-title">Logo</div>
+        <div id="logo-preview-wrap" style="text-align:center;margin-bottom:12px;min-height:80px;">
+            <img id="logo-preview" src="/static/uploads/logo.png" alt="Current logo"
+                 style="max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;border:1px solid #2a2a2a;background:#000;padding:8px;"
+                 onerror="this.style.display='none';document.getElementById('logo-none-msg').style.display='block';">
+            <p id="logo-none-msg" style="display:none;color:#444;font-family:'Barlow',sans-serif;font-size:13px;margin:0;">No logo uploaded yet.</p>
+        </div>
+        <div class="upload-area" onclick="document.getElementById('logo-input').click()">
+            <p>Click to upload logo (PNG recommended)</p>
+        </div>
+        <input type="file" id="logo-input" accept="image/*" style="display:none" onchange="uploadLogo(this)">
+        <p id="upload-status" style="color:#555;margin-top:10px;font-family:'Barlow',sans-serif;font-size:15px;"></p>
+    </div>
+
+<div class="section">
+<div class="section-title">Screen shape</div>
+<div style="margin-top:24px;">
+            <label style="margin-bottom:10px;">Orientation</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="sp-toggle-btn orient-btn active" data-val="auto" style="text-align:center;">
+                    AUTO<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">Detect screen</span>
+                </button>
+                <button class="sp-toggle-btn orient-btn" data-val="horizontal" style="text-align:center;">
+                    HORIZONTAL<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">TV landscape 1920×1080</span>
+                </button>
+                <button class="sp-toggle-btn orient-btn" data-val="vertical" style="text-align:center;">
+                    VERTICAL<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">TV portrait 1080×1920</span>
+                </button>
+                <button class="sp-toggle-btn orient-btn" data-val="phone" style="text-align:center;">
+                    PHONE<span style="display:block;font-size:11px;font-weight:400;letter-spacing:0;opacity:0.6;margin-top:2px;">Mobile browser</span>
+                </button>
             </div>
-            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin:0 0 10px;">
-                Port this device listens on (default 5000). Save then restart backend to apply.
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">
+                Vertical and Phone both put the away team on top.
             </p>
         </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <button class="btn" onclick="restartBackend()" style="background:#1565C0;color:white;font-size:16px;padding:10px 22px;">RESTART BACKEND</button>
+</div>
+
+<div class="section">
+<div class="section-title">Ticker</div>
+<div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap;">
+                <label style="margin:0;font-size:16px;color:#888;font-family:'Barlow',sans-serif;">Ticker Speed</label>
+                <input type="range" id="ticker_speed" min="30" max="400" step="5"
+                       style="flex:1;min-width:200px;accent-color:var(--accent);"
+                       oninput="document.getElementById('ticker_speed_val').textContent = this.value + ' px/s'">
+                <span id="ticker_speed_val" style="font-size:16px;color:#ccc;font-family:'Barlow Condensed',sans-serif;min-width:70px;text-align:right;">120 px/s</span>
+            </div>
+</div>
+    </section>
+    <section class="page" data-page="look" aria-label="Look" hidden>
+<div class="section">
+<div class="section-title">Style</div>
+<div style="margin-top:24px;">
+            <label style="margin-bottom:12px;">Theme</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <button class="theme-btn" data-val="dark">🌙 DARK</button>
+                <button class="theme-btn" data-val="light">☀️ LIGHT</button>
+            </div>
         </div>
-        <p id="backend-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
-    </div>
+<div style="margin-top:24px;">
+            <label style="margin-bottom:10px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Display Font</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;" id="font-picker">
+                <button class="sp-toggle-btn font-btn active" data-font="Barlow Condensed">Barlow Condensed</button>
+                <button class="sp-toggle-btn font-btn" data-font="Bebas Neue">Bebas Neue</button>
+                <button class="sp-toggle-btn font-btn" data-font="Oswald">Oswald</button>
+                <button class="sp-toggle-btn font-btn" data-font="Roboto Condensed">Roboto Condensed</button>
+                <button class="sp-toggle-btn font-btn" data-font="Anton">Anton</button>
+                <button class="sp-toggle-btn font-btn" data-font="Exo 2">Exo 2</button>
+                <button class="sp-toggle-btn font-btn" data-font="Teko">Teko</button>
+                <button class="sp-toggle-btn font-btn" data-font="Saira Condensed">Saira Condensed</button>
+                <button class="sp-toggle-btn font-btn" data-font="Rajdhani">Rajdhani</button>
+                <button class="sp-toggle-btn font-btn" data-font="Syncopate">Syncopate</button>
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">Applied to scores, team names, and all headings on the scoreboard.</p>
+        </div>
+<div style="margin-top:28px;">
+            <label style="margin-bottom:6px;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);">Color Mode</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <button class="cmode-btn" data-val="auto">🎨 AUTO (from favorite team)</button>
+                <button class="cmode-btn" data-val="manual">✋ MANUAL</button>
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;">
+                Auto builds the background, cards, header and accent colors from your favorite team's official colors.
+                Manual uses the colors you pick below. Live/Final/Flash state colors are always respected.
+            </p>
+            <div id="palette-team-wrap" style="margin-top:16px;">
+                <label style="margin-bottom:6px;font-size:15px;color:#888;font-family:'Barlow',sans-serif;">Palette Team</label>
+                <select id="palette_team" style="width:100%;max-width:420px;"></select>
+                <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:6px;">Which favorite drives the auto palette. Leave as "First favorite" to track whichever team is first.</p>
+            </div>
+        </div>
+</div>
 
+<div class="section">
+<div class="section-title">Colors</div>
+<p class="hint">Open a group to change its colors. In Auto color mode the background, cards, header and accents come from your favorite team.</p>
+<details class="color-group"><summary>Header &amp; info</summary>
+<div style="margin-top:28px;">
+            
+            <div class="color-grid">
+                <div class="color-item"><label>Display Name &amp; Clock</label><input type="color" id="header_color" value="#F5A800"></div>
+                <div class="color-item"><label>Weather</label><input type="color" id="color_weather" value="#dddddd"></div>
+            </div>
+        </div>
+</details>
+<details class="color-group"><summary>Game cards</summary>
+<div style="margin-top:22px;">
+            
+            <div class="color-grid">
+                <div class="color-item"><label>League Tag</label><input type="color" id="color_league_label" value="#099afc"></div>
+                <div class="color-item"><label>VS Label</label><input type="color" id="color_vs_color" value="#ffffff"></div>
+                <div class="color-item"><label>Game Time / Date</label><input type="color" id="color_pre_time" value="#ffffff"></div>
+                <div class="color-item"><label>Score Separator ( – )</label><input type="color" id="color_score_sep" value="#888888"></div>
+                <div class="color-item"><label>Live Score</label><input type="color" id="color_live" value="#00E676"></div>
+                <div class="color-item"><label>Final Score</label><input type="color" id="color_final" value="#FF1744"></div>
+                <div class="color-item"><label>Score Update Flash</label><input type="color" id="color_flash" value="#FFD600"></div>
+                <div class="color-item"><label>Winner Score &amp; Name</label><input type="color" id="color_winner" value="#00E676"></div>
+                <div class="color-item"><label>Loser Score &amp; Name</label><input type="color" id="color_loser" value="#FF1744"></div>
+                <div class="color-item"><label>Tied Score</label><input type="color" id="color_tie_score" value="#FFD600"></div>
+                <div class="color-item"><label>Team Abbreviation</label><input type="color" id="color_team_abbr" value="#ffffff"></div>
+                <div class="color-item"><label>Fav Team Name</label><input type="color" id="color_fav_abbr" value="#F5A800"></div>
+                <div class="color-item"><label>Fav Team Score</label><input type="color" id="color_fav_score" value="#F5A800"></div>
+            </div>
+        </div>
+</details>
+<details class="color-group"><summary>Ticker</summary>
+<div style="margin-top:22px;">
+            
+            <div class="color-grid">
+                <div class="color-item"><label>Default Text</label><input type="color" id="color_ticker_base" value="#ffffff"></div>
+                <div class="color-item"><label>Live Game Items</label><input type="color" id="color_ticker_live" value="#00E676"></div>
+                <div class="color-item"><label>Final Game Items</label><input type="color" id="color_ticker_final" value="#FF1744"></div>
+                <div class="color-item"><label>Separator ( · ///)</label><input type="color" id="color_ticker_sep" value="#444444"></div>
+            </div>
+            
+        </div>
+</details>
+<details class="color-group"><summary>Racing &amp; golf cards</summary>
+<div style="margin-top:22px;">
+            
+            <div class="color-grid">
+                <div class="color-item"><label>Car Number / Strokes</label><input type="color" id="color_nascar_num" value="#FFD600"></div>
+                <div class="color-item"><label>Position (1st, 2nd…)</label><input type="color" id="color_race_pos" value="#F5A800"></div>
+                <div class="color-item"><label>Laps Left / Hole Info</label><input type="color" id="color_race_laps" value="#888888"></div>
+                <div class="color-item"><label>Race / Tournament Name</label><input type="color" id="color_card_subtext" value="#555555"></div>
+            </div>
+        </div>
+</details>
+<details class="color-group"><summary>Dark theme surfaces</summary>
+<div style="margin-top:28px;">
+            
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Background, cards, and borders when dark theme is active.</p>
+            <div class="color-grid">
+                <div class="color-item">
+                    <label>Body Background</label>
+                    <input type="color" id="color_dark_bg" value="#080808">
+                </div>
+                <div class="color-item">
+                    <label>Card Background</label>
+                    <input type="color" id="color_dark_card" value="#111111">
+                </div>
+                <div class="color-item">
+                    <label>Borders &amp; Dividers</label>
+                    <input type="color" id="color_dark_border" value="#2a2a2a">
+                </div>
+                <div class="color-item">
+                    <label>VS / Pre-game Text</label>
+                    <input type="color" id="color_dark_vs" value="#ffffff">
+                </div>
+                <div class="color-item">
+                    <label>Ticker Background</label>
+                    <input type="color" id="color_dark_ticker_bg" value="#000000">
+                </div>
+            </div>
+        </div>
+</details>
+<details class="color-group"><summary>Light theme surfaces</summary>
+<div style="margin-top:28px;">
+            
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Base hue for the frosted-glass background gradient. Cards and header will tint from this.</p>
+            <div class="color-grid">
+                <div class="color-item">
+                    <label>Background Tint</label>
+                    <input type="color" id="color_light_bg" value="#c4d6f0">
+                </div>
+                <div class="color-item">
+                    <label>Card / Glass Tint</label>
+                    <input type="color" id="color_light_card" value="#ffffff">
+                </div>
+                <div class="color-item">
+                    <label>Border / Glow</label>
+                    <input type="color" id="color_light_border" value="#ffffff">
+                </div>
+                <div class="color-item">
+                    <label>VS / Pre-game Text</label>
+                    <input type="color" id="color_light_vs" value="#445566">
+                </div>
+            </div>
+        </div>
+</details>
+<details class="color-group"><summary>Everything else</summary>
+<div style="margin-top:28px;">
+            
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:10px;">Everything else on the scoreboard — headers, borders, ticker, RSS/local slides and specials.</p>
+            <div class="color-grid">
+                <div class="color-item"><label>Header Background (Dark)</label><input type="color" id="color_header_bg_dark" value="#080808"></div>
+                <div class="color-item"><label>Header Background (Light)</label><input type="color" id="color_header_bg_light" value="#eef2f8"></div>
+                <div class="color-item"><label>Header Border</label><input type="color" id="color_header_border" value="#2a2a2a"></div>
+                <div class="color-item"><label>Card Border (Pre-game)</label><input type="color" id="color_card_border" value="#ffffff"></div>
+                <div class="color-item"><label>Logo Glow</label><input type="color" id="color_logo_glow" value="#ffffff"></div>
+                <div class="color-item"><label>Ticker Top Border</label><input type="color" id="color_ticker_border" value="#099afc"></div>
+                <div class="color-item"><label>Final Badge Text</label><input type="color" id="color_final_badge_text" value="#ffffff"></div>
+                <div class="color-item"><label>RSS / Local Label</label><input type="color" id="color_rss_label" value="#ffffff"></div>
+                <div class="color-item"><label>RSS / Local Event</label><input type="color" id="color_rss_event" value="#ffffff"></div>
+                <div class="color-item"><label>RSS / Local Sub-text</label><input type="color" id="color_rss_subevent" value="#888888"></div>
+                <div class="color-item"><label>Special Body Text</label><input type="color" id="color_special_text" value="#cccccc"></div>
+                <div class="color-item"><label>Golf Position</label><input type="color" id="color_golf_pos" value="#F5A800"></div>
+                <div class="color-item"><label>Race Event Name</label><input type="color" id="color_race_event" value="#666666"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px;">
+                <input type="checkbox" id="ticker_border_cycle" style="width:20px;height:20px;cursor:pointer;accent-color:var(--accent);">
+                <label for="ticker_border_cycle" style="margin:0;font-size:16px;font-weight:700;letter-spacing:1px;color:#ccc;cursor:pointer;">Cycle ticker border colors (burn-in prevention)</label>
+            </div>
+        </div>
+</details>
+</div>
+    </section>
+    <section class="page" data-page="device" aria-label="Device" hidden>
+<div class="section">
+<div class="section-title">This display</div>
+<div class="row">
+            <div>
+                <label>Scoreboard Name</label>
+                <input type="text" id="display_name" placeholder="Scoreboard">
+            </div>
+            <div>
+                <label>City (for weather)</label>
+                <input type="text" id="city" placeholder="Auburn, NE">
+            </div>
+        </div>
+<div class="row" style="margin-top:16px;">
+            <div>
+                <label>Timezone</label>
+                <select id="timezone">
+                    <option value="America/New_York">Eastern</option>
+                    <option value="America/Chicago" selected>Central</option>
+                    <option value="America/Denver">Mountain</option>
+                    <option value="America/Los_Angeles">Pacific</option>
+                    <option value="America/Anchorage">Alaska</option>
+                    <option value="Pacific/Honolulu">Hawaii</option>
+                </select>
+            </div>
+        </div>
+</div>
 
-    <!-- ── Display Schedule ── -->
-    <div class="section">
-        <div class="section-title">Display Schedule</div>
-        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
-            Automatically sleep or wake the monitor using <code style="color:#aaa">xset dpms</code>.
+<div class="section">
+        <div class="section-title">Device Mode</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:18px;">
+            Choose whether this device is the central data server or a display kiosk. Save after changing modes.
         </p>
-        <div style="display:flex;align-items:center;gap:20px;margin-bottom:14px;">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;margin:0;">
-                <input type="checkbox" id="shutdown-enabled" style="width:20px;height:20px;cursor:pointer;accent-color:#FF1744;">
-                Shutdown display at
-            </label>
-            <input type="time" id="shutdown-time" style="width:auto;padding:10px 14px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:20px;font-family:'Barlow Condensed',sans-serif;outline:none;">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <button class="mode-btn" data-mode="server" onclick="setMode('server')">
+                SERVER
+                <span style="display:block;font-size:12px;font-weight:400;letter-spacing:0;opacity:0.7;margin-top:4px;">Download &amp; serve scores</span>
+            </button>
+            <button class="mode-btn" data-mode="kiosk" onclick="setMode('kiosk')">
+                KIOSK
+                <span style="display:block;font-size:12px;font-weight:400;letter-spacing:0;opacity:0.7;margin-top:4px;">Display from a server</span>
+            </button>
         </div>
-        <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;margin:0;">
-                <input type="checkbox" id="startup-enabled" style="width:20px;height:20px;cursor:pointer;accent-color:#00E676;">
-                Wake display at
-            </label>
-            <input type="time" id="startup-time" style="width:auto;padding:10px 14px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:20px;font-family:'Barlow Condensed',sans-serif;outline:none;">
-        </div>
-        <div style="display:flex;gap:12px;">
-            <button class="btn" onclick="displayAction('off')" style="background:#FF1744;color:white;font-size:16px;padding:10px 22px;">SLEEP NOW</button>
-            <button class="btn" onclick="displayAction('on')"  style="background:#00E676;color:#000;font-size:16px;padding:10px 22px;">WAKE NOW</button>
-        </div>
-        <p id="display-status" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:10px;"></p>
     </div>
 
+<div class="section server-only" id="server-options-section">
+        <div class="section-title">Server Options</div>
 
-    </div><!-- /section-pair: Kiosk Control + Display Schedule -->
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">
+            <input type="checkbox" id="server_enable_display" style="width:20px;height:20px;cursor:pointer;accent-color:var(--accent);">
+            <label style="margin:0;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;cursor:pointer;" for="server_enable_display">
+                Show scoreboard display on this server
+            </label>
+        </div>
+        <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-bottom:20px;">
+            Uncheck to run this device as a data-only backend — no scoreboard will be shown here.
+        </p>
 
-    <!-- ── Wi-Fi ── -->
-    <div class="section" id="wifi-section">
+        
+
+        <!-- Pairing Code -->
+        <div class="info-box">
+            <div class="info-box-title">KIOSK PAIRING</div>
+            <p style="color:#666;font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:12px;">
+                Generate a one-time code to authorize a kiosk to connect. Expires in 10 minutes, single use only.
+            </p>
+            <button class="btn btn-save" style="font-size:16px;padding:10px 22px;" onclick="generatePairingCode()">GENERATE PAIRING CODE</button>
+            <div id="pairing-code-display" style="display:none;">
+                <div class="pairing-code-box">
+                    <div style="font-size:13px;color:#666;font-family:'Barlow',sans-serif;letter-spacing:1px;margin-bottom:8px;">ONE-TIME PAIRING CODE</div>
+                    <div id="pairing-code-value" class="pairing-code-value"></div>
+                    <div id="pairing-code-expires" style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;margin-top:8px;"></div>
+                </div>
+                <p id="pairing-code-timer" style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:8px;text-align:center;"></p>
+            </div>
+        </div>
+
+        <!-- Connected Kiosks -->
+        <div>
+            <div style="font-size:15px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">CONNECTED KIOSKS</div>
+            <div id="kiosks-list"><p style="color:#444;font-family:'Barlow',sans-serif;font-size:14px;">Loading…</p></div>
+            <button class="btn" style="margin-top:10px;background:#1a1a1a;color:#888;border:1px solid #333;font-size:15px;padding:8px 18px;" onclick="loadKiosks()">REFRESH</button>
+        </div>
+    </div>
+
+<div class="section kiosk-only" id="kiosk-setup-section" style="display:none">
+        <div class="section-title">Kiosk Setup</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
+            Connect this kiosk to a Scoreboard server. You need a pairing code generated from the server's settings page.
+        </p>
+
+        <!-- Connection status -->
+        <div class="info-box" id="kiosk-status-box">
+            <div class="info-box-title">CONNECTION STATUS</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <span id="kiosk-conn-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;flex-shrink:0;"></span>
+                <span id="kiosk-conn-text" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">NOT CONNECTED</span>
+            </div>
+            <div id="kiosk-server-name" style="font-size:13px;color:#555;font-family:'Barlow',sans-serif;"></div>
+            <button class="btn" id="kiosk-disconnect-btn" style="display:none;margin-top:10px;background:#FF1744;color:white;font-size:14px;padding:8px 18px;" onclick="disconnectKiosk()">DISCONNECT</button>
+        </div>
+
+        <!-- Connect form -->
+        <div id="kiosk-connect-form">
+            <label>Kiosk Name</label>
+            <input type="text" id="kiosk_name_input" placeholder="Display 1">
+
+            <label>Server URL</label>
+            <input type="text" id="server_url_input" placeholder="http://192.168.1.100:5000">
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-top:4px;">
+                Include <code style="color:#aaa">http://</code> and the port (default 5000).
+            </p>
+
+            <label>Pairing Code</label>
+            <input type="text" id="pairing_code_input" placeholder="ABC123" maxlength="6"
+                   style="text-transform:uppercase;letter-spacing:6px;font-size:28px;font-weight:900;"
+                   oninput="this.value=this.value.toUpperCase()">
+
+            <div style="margin-top:18px;display:flex;gap:12px;align-items:center;">
+                <button class="btn btn-save" style="font-size:16px;padding:10px 22px;" onclick="connectKiosk()">CONNECT TO SERVER</button>
+                <span id="kiosk-connect-msg" style="font-size:15px;font-family:'Barlow',sans-serif;color:#555;"></span>
+            </div>
+        </div>
+    </div>
+
+<div class="section" id="wifi-section">
         <div class="section-title">Wi-Fi</div>
 
         <!-- Status bar -->
@@ -784,8 +757,65 @@
         <p id="wifi-msg" style="font-size:14px;font-family:'Barlow',sans-serif;color:#555;margin-top:10px;min-height:20px;"></p>
     </div>
 
-    <!-- ── Software Updates ── -->
-    <div class="section">
+<div class="section">
+        <div class="section-title">Display Schedule</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:20px;">
+            Automatically sleep or wake the monitor using <code style="color:#aaa">xset dpms</code>.
+        </p>
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;margin:0;">
+                <input type="checkbox" id="shutdown-enabled" style="width:20px;height:20px;cursor:pointer;accent-color:#FF1744;">
+                Shutdown display at
+            </label>
+            <input type="time" id="shutdown-time" style="width:auto;padding:10px 14px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:20px;font-family:'Barlow Condensed',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:20px;font-weight:700;letter-spacing:1px;color:#ccc;margin:0;">
+                <input type="checkbox" id="startup-enabled" style="width:20px;height:20px;cursor:pointer;accent-color:#00E676;">
+                Wake display at
+            </label>
+            <input type="time" id="startup-time" style="width:auto;padding:10px 14px;background:#000;border:2px solid #2a2a2a;color:white;border-radius:10px;font-size:20px;font-family:'Barlow Condensed',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;gap:12px;">
+            <button class="btn" onclick="displayAction('off')" style="background:#FF1744;color:white;font-size:16px;padding:10px 22px;">SLEEP NOW</button>
+            <button class="btn" onclick="displayAction('on')"  style="background:#00E676;color:#000;font-size:16px;padding:10px 22px;">WAKE NOW</button>
+        </div>
+        <p id="display-status" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:10px;"></p>
+    </div>
+
+<div class="section">
+        <div class="section-title">Kiosk Control</div>
+        <p style="color:#666;font-family:'Barlow',sans-serif;font-size:15px;margin-bottom:12px;">
+            Controls the kiosk browser (Chrome). Restart resets a frozen display.
+        </p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button class="btn" onclick="kioskAction('restart')" style="background:var(--accent);color:#000;font-size:16px;padding:10px 22px;">RESET KIOSK</button>
+            <button class="btn" onclick="kioskAction('stop')"    style="background:#FF1744;color:white;font-size:16px;padding:10px 22px;">STOP KIOSK</button>
+            <button class="btn" onclick="kioskAction('start')"   style="background:#00E676;color:#000;font-size:16px;padding:10px 22px;">START KIOSK</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
+            <span style="font-size:14px;color:#555;font-family:'Barlow',sans-serif;">STATUS:</span>
+            <span id="kiosk-status-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;"></span>
+            <span id="kiosk-status-text" style="font-size:16px;font-weight:700;letter-spacing:1px;color:#555;">—</span>
+        </div>
+        <p id="kiosk-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
+
+        <div style="margin-top:24px;margin-bottom:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+            <div>
+                <label style="display:block;margin-bottom:6px;">Server Port</label>
+                <input type="number" id="server_port" min="1" max="65535" placeholder="5000" style="width:110px;">
+            </div>
+            <p style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin:0 0 10px;">
+                Port this device listens on (default 5000). Save then restart backend to apply.
+            </p>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button class="btn" onclick="restartBackend()" style="background:#1565C0;color:white;font-size:16px;padding:10px 22px;">RESTART BACKEND</button>
+        </div>
+        <p id="backend-msg" style="color:#555;font-family:'Barlow',sans-serif;font-size:14px;margin-top:8px;"></p>
+    </div>
+
+<div class="section">
         <div class="section-title">Software Updates</div>
 
         <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
@@ -839,9 +869,7 @@
         <div id="update-last-checked" style="font-size:13px;color:#444;font-family:'Barlow',sans-serif;margin-top:10px;"></div>
     </div>
 
-
-    <!-- ── Admin Credentials ── -->
-    <div class="section">
+<div class="section">
         <div class="section-title">Admin Credentials</div>
         <p class="cred-note">Change the username/password used to access this settings page.</p>
         <div class="row">
@@ -855,7 +883,8 @@
             </div>
         </div>
     </div>
-
+    </section>
+    </main>
 </div>
 
 <div class="toast" id="toast">SAVED</div>
@@ -1171,6 +1200,60 @@
 
     function setTransition(val) {
         document.querySelectorAll('.trans-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+        document.getElementById('quick-switch-row').style.display = val === 'quick' ? '' : 'none';
+    }
+
+    // ── Pages ──
+
+    function showPage(name) {
+        const pages = [...document.querySelectorAll('.page')];
+        if (!pages.some(p => p.dataset.page === name)) name = 'games';
+        pages.forEach(p => p.hidden = p.dataset.page !== name);
+        document.querySelectorAll('.rail-btn').forEach(b => {
+            const on = b.dataset.page === name;
+            b.classList.toggle('active', on);
+            if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+        });
+        history.replaceState(null, '', '#' + name);
+        window.scrollTo(0, 0);
+    }
+
+    // ── Update timing ──
+
+    let intervalStops = [1, 2, 5, 10, 15, 30, 45, 60, 120, 180, 240, 360, 480, 720, 1440];
+
+    function intervalText(minutes) {
+        if (minutes < 60) return minutes + (minutes === 1 ? ' minute' : ' minutes');
+        const h = Math.round(minutes / 6) / 10;
+        return h + (h === 1 ? ' hour' : ' hours');
+    }
+
+    function intervalMinutes() {
+        return intervalStops[Number(document.getElementById('update_interval_idx').value)];
+    }
+
+    function setUpdateInterval(minutes) {
+        minutes = Math.min(1440, Math.max(1, Number(minutes) || 1440));
+        if (!intervalStops.includes(minutes)) intervalStops = [...intervalStops, minutes].sort((a, b) => a - b);
+        const slider = document.getElementById('update_interval_idx');
+        slider.max = intervalStops.length - 1;
+        slider.value = intervalStops.indexOf(minutes);
+        showInterval();
+    }
+
+    function showInterval() {
+        const m = intervalMinutes();
+        document.getElementById('update_interval_label').textContent = intervalText(m);
+        document.getElementById('update_interval_help').textContent = m >= 1440
+            ? 'Quietest: only the nightly read, game-day checks and live games.'
+            : `Today's unfinished games are also re-checked every ${intervalText(m)}, one request per league that has a game today.`;
+    }
+
+    function setScope(val) {
+        document.querySelectorAll('.scope-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+        document.getElementById('scope_help').textContent = val === 'all'
+            ? 'Every selected league is polled each minute whenever any of its games is live. Expect thousands of requests a day.'
+            : 'Only games with a favorite team, driver or golfer are checked during the day. Other leagues update once a night.';
     }
 
     // ── Orient / Theme toggles ──
@@ -1335,22 +1418,74 @@
 
     // ── Server: cache status ──
 
+    const STATE_TEXT = {
+        live: 'Live, every minute', gameday: 'Game day', interval: 'On your interval', idle: 'Waiting',
+        backoff: 'Retrying after an error', full: 'Due now', 'not tracked': 'Not tracked',
+    };
+
+    function whenText(ts) {
+        if (!ts) return '—';
+        const d = new Date(ts * 1000);
+        const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        return d.toDateString() === new Date().toDateString()
+            ? time : d.toLocaleDateString([], { weekday: 'short' }) + ' ' + time;
+    }
+
+    function setText(id, text) { document.getElementById(id).textContent = text; }
+
+    function renderUsage(u) {
+        const total = u.total.toLocaleString();
+        setText('usage-total', total);
+        setText('usage-limit', u.limit ? `of ${u.limit.toLocaleString()} today` : 'today (no limit)');
+        setText('strip-usage', u.limit ? `${total} / ${u.limit.toLocaleString()}` : total);
+        const pct = u.limit ? Math.min(100, 100 * u.total / u.limit) : 0;
+        const fill = document.getElementById('usage-fill');
+        fill.style.width = pct + '%';
+        fill.classList.toggle('over', u.blocked > 0);
+        const names = { schedule: 'schedules', live: 'live scores', teams: 'team lists', logos: 'logos', discovery: 'series lookup' };
+        let text = Object.entries(u.by_kind).map(([k, v]) => `${v.toLocaleString()} ${names[k] || k}`).join(' · ') || 'Nothing sent yet today.';
+        if (u.blocked) text += ` · Limit reached: ${u.blocked.toLocaleString()} held back until midnight.`;
+        setText('usage-kinds', text);
+        const days = Object.entries(u.history).slice(-7);
+        const max = Math.max(1, ...days.map(d => d[1]));
+        document.getElementById('usage-history').replaceChildren(...days.map(([day, n]) => {
+            const col = document.createElement('div');
+            col.title = `${day}: ${n} requests`;
+            col.innerHTML = '<b></b><i></i><small></small>';
+            col.querySelector('b').textContent = n.toLocaleString();
+            col.querySelector('i').style.height = Math.max(2, 56 * n / max) + 'px';
+            col.querySelector('small').textContent = day.slice(5);
+            return col;
+        }));
+    }
+
     async function refreshCacheStatus() {
         const el = document.getElementById('cache-status-text');
         try {
             const res = await fetch('/api/cache/status');
             const data = await res.json();
-            if (data.updated_at) {
-                const dt = new Date(data.updated_at);
-                el.textContent = `Last updated: ${dt.toLocaleTimeString()} · ${data.leagues_cached.length} league(s) cached`;
-                el.style.color = '#00E676';
-            } else {
-                el.textContent = 'Cache not yet populated — scores will load on first request.';
-                el.style.color = '#FFD600';
+            renderUsage(data.usage);
+            if (data.paused_until) {
+                setText('usage-kinds', `ESPN refused a request. Paused until ${whenText(data.paused_until)}.`);
             }
+            const rows = Object.values(data.leagues).sort((a, b) => (a.next_check_at || 9e12) - (b.next_check_at || 9e12));
+            document.getElementById('league-status-rows').replaceChildren(...(rows.length ? rows : [null]).map(r => {
+                const tr = document.createElement('tr');
+                const cells = r ? [r.label, STATE_TEXT[r.state] || r.state, whenText(r.checked_at), whenText(r.next_check_at)]
+                                : ['Nothing cached yet.'];
+                cells.forEach(c => { const td = document.createElement('td'); td.textContent = c; if (!r) td.colSpan = 4; tr.appendChild(td); });
+                if (r && r.state === 'live') tr.className = 'is-live';
+                return tr;
+            }));
+            const live = rows.filter(r => r.state === 'live').map(r => r.label);
+            setText('strip-live', live.length ? live.join(', ') : 'Nothing');
+            const next = rows.filter(r => r.next_check_at).map(r => r.next_check_at);
+            setText('strip-next', next.length ? (Math.min(...next) * 1000 <= Date.now() ? 'Now' : whenText(Math.min(...next))) : '—');
+            el.textContent = data.updated_at
+                ? `Last data received ${new Date(data.updated_at).toLocaleTimeString()}.`
+                : 'No data yet: scores load on first request.';
         } catch(e) {
-            el.textContent = 'Could not check cache status.';
-            el.style.color = '#FF1744';
+            el.textContent = 'Could not check status.';
         }
     }
 
@@ -1360,14 +1495,12 @@
         btn.disabled = true;
         btn.textContent = 'REFRESHING...';
         el.textContent = 'Fetching latest scores...';
-        el.style.color = '#FFD600';
         try {
             await fetch('/api/cache/refresh', { method: 'POST' });
             await new Promise(r => setTimeout(r, 3000));
             await refreshCacheStatus();
         } catch(e) {
             el.textContent = 'Refresh failed.';
-            el.style.color = '#FF1744';
         } finally {
             btn.disabled = false;
             btn.textContent = 'FORCE REFRESH';
@@ -1931,6 +2064,12 @@
         specials.forEach((sp, i) => { if (!sp.uid) sp.uid = `sp-${Date.now()}-${i}`; });
         document.getElementById('slide_duration').value = currentSettings.slide_duration || 8;
         setTransition(currentSettings.slide_transition || 'slide-right');
+        const switchSecs = currentSettings.transition_seconds || 0.8;
+        document.getElementById('transition_seconds').value = switchSecs;
+        document.getElementById('transition_seconds_val').textContent = Number(switchSecs).toFixed(1) + ' s';
+        setUpdateInterval(currentSettings.update_interval_minutes);
+        setScope(currentSettings.live_scope || 'favorites');
+        document.getElementById('daily_api_limit').value = currentSettings.daily_api_limit ?? 3000;
 
         const tickerSpeed = currentSettings.ticker_speed || 120;
         document.getElementById('ticker_speed').value = tickerSpeed;
@@ -2060,6 +2199,10 @@
             slide_duration: parseInt(document.getElementById('slide_duration').value) || 8,
             slide_transition: document.querySelector('.trans-btn.active')?.dataset.val || 'slide-right',
             ticker_speed: parseInt(document.getElementById('ticker_speed').value) || 120,
+            transition_seconds: parseFloat(document.getElementById('transition_seconds').value) || 0.8,
+            update_interval_minutes: intervalMinutes(),
+            live_scope: document.querySelector('.scope-btn.active')?.dataset.val || 'favorites',
+            daily_api_limit: (v => Number.isNaN(v) ? 3000 : Math.max(0, v))(parseInt(document.getElementById('daily_api_limit').value)),
             date_windows: (() => {
                 const date_windows = {};
                 document.querySelectorAll('#event-windows-grid input[data-league]').forEach(inp => {
@@ -2106,6 +2249,7 @@
                 body: JSON.stringify(payload),
             });
             showToast('SAVED');
+            refreshCacheStatus();
         } catch(e) {
             showToast('ERROR');
         }
@@ -2701,6 +2845,9 @@
 
     // Apply default mode immediately so sections don't flash before settings load
     setMode('server');
+    showPage(location.hash.slice(1) || 'games');
+    window.addEventListener('hashchange', () => showPage(location.hash.slice(1)));
+    setInterval(refreshCacheStatus, 60000);
 
     pollKioskStatus();
     setInterval(pollKioskStatus, 15000);

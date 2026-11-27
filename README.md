@@ -2,6 +2,25 @@
 
 ![Scoreboard](Images/Scoreboard1.png)
 
+## What's New in 1.6
+
+**Cutting down on API polling.** Version 1.5 still asked ESPN far too often: any game in any selected league was polled every 30 seconds, favorite or not, which added up to many thousands of requests a day and risked getting the address blocked. In a simulated 12-league Saturday, 1.5 sent about **14,000** requests. 1.6 sends about **420**.
+
+* **Midnight read** — schedules are fetched once, just after local midnight, usually one request per league per month. If nothing is happening, that is all for 24 hours.
+* **Game day** — a favorite's game later today is checked every 3 hours until it starts.
+* **Live** — once a minute, only while a favorite's game is on.
+* **You choose the pace** — an update interval from 1 minute to 24 hours (default 24), favorites-only (default) or every-game polling. This replaces `live_favorites_only`.
+* **Guard rails** — every request is counted and shown in Settings, capped at 3,000 a day, and a refusal from ESPN (429/403) pauses requests for 30 minutes.
+* **Offline** — a paired kiosk shows its server's saved data when the server is unreachable instead of going to ESPN.
+
+Also in this release:
+
+* **Quick switch** card transition, adjustable from 0.2 to 1.9 seconds.
+* **Reorganized settings** — Games, Updates, Screen, Look and Device pages with a live status strip.
+* **Fixed** — NASCAR now uses ESPN's current series address.
+
+Good to know when upgrading: in favorites-only mode, leagues where you follow nobody update their ticker scores overnight; a paired kiosk now takes its slide timing and transition from its own settings. See [Smart Polling & Offline Mode](#smart-polling--offline-mode).
+
 ## What's New in 1.5
 
 Version 1.5 is about doing far less work for the same screen: the scoreboard now asks ESPN only when there is something new to learn, and it remembers what it learned.
@@ -40,15 +59,25 @@ It pulls real-time scores from ESPN for the major pro and college leagues, plus 
 
 ## Smart Polling & Offline Mode
 
-The scoreboard is deliberately quiet on the network. It only talks to ESPN when there is something to learn:
+The scoreboard asks ESPN for something only when there is something new to learn.
 
-* **Schedule checks** — the whole date window is re-read a few times a day (just after midnight, then 6 AM, noon and 5 PM) to catch changed game times. When nothing you follow starts within 24 hours it drops to just midnight and noon.
-* **Live polling** — a league is polled for scores only while one of its games is in progress or about to start (from 5 minutes before kickoff), and only for *today's* slate — one request instead of one per day of the window. A game that is days away costs nothing between schedule checks.
-* **Slow sports** — PGA and cricket poll every few minutes, not every 30 seconds.
-* **Failures back off** (30 s → 15 min) and a dead connection stops after the first failed request instead of timing out repeatedly.
-* **Everything is cached on disk** in `cache/` next to `app.py`: league schedules, team lists and colors (7 days), local school/league feeds (3 hours), weather (30 minutes), and the logos of your favorite teams. After a restart or with the internet down, the last known schedule, teams and logos still display.
+| When | What is requested |
+|---|---|
+| Just after local midnight | Each league's schedule: one request per calendar month (high-volume college sports are read day by day). If nothing is happening, that is all for 24 hours. |
+| A favorite plays later today | That day's games, every 3 hours until the start. |
+| That game is on | That day's games, once a minute, from 1 minute before the scheduled start until it is final. One request covers every game that day in that league. |
+| A start is more than an hour late | Every 15 minutes. |
+| Slow events | PGA every 10 minutes, cricket every 5 minutes while on. |
 
-Set `"live_favorites_only": true` in `settings.json` to have only games involving your favorite teams wake the live poller. `GET /api/cache/status` (admin) shows what each league is doing and when it will next poll.
+**Settings → Updates** controls it:
+
+* **Also check today's games every** — 1 minute to 24 hours (default 24 hours). Below 24 hours, unfinished games on today's slate are re-checked that often. Live games are always 1 minute.
+* **Check during the day for** — *My favorites only* (default) or *Every game*. In favorites mode a league where you follow nobody is read once a night, so its scores in the ticker update overnight; a game left in progress is labelled "as of" the time it was read.
+* **Never exceed** — a daily ceiling on ESPN requests (default 3,000; 0 = none). *Every game* with many leagues can reach it.
+
+The same page shows today's request count, the last week, and when each league will next be checked. If ESPN answers 429 or 403, all requests pause for 30 minutes. Failures back off (1 minute up to 1 hour; 5 minutes during a live game).
+
+**Offline:** schedules, team lists and colors (7 days), local school feeds (3 hours), weather (30 minutes) and favorite-team logos are saved in `cache/` next to `app.py`. A restart or internet outage keeps showing the last known data. A paired kiosk keeps showing its server's last answer for up to 24 hours before it would ever contact ESPN itself.
 
 ## Requirements
 
@@ -91,7 +120,7 @@ Once installed, find the device's IP address (`hostname -I` on the Pi, or check 
 | Combined            | `5000` | `http://<device-ip>:5000/settings`  |
 | Kiosk               | `5001` | `http://<device-ip>:5001/settings`  |
 
-**Default login is `admin` / `root`** — change this immediately from the Settings page (Admin Credentials section) once you're in.
+**Default login is `admin` / `root`** — change this immediately under Settings → Device → Admin Credentials once you're in.
 
 If you can't find the device's IP (e.g. no DHCP, no router access), `install.sh` automatically assigns a fallback static IP of **`192.168.1.250`** on the wired Ethernet port as a failsafe — connect a laptop to the same switch/router and browse to `http://192.168.1.250:5000/settings` (or `:5001` for kiosk-only installs).
 
@@ -153,23 +182,23 @@ sudo journalctl -u kiosk.service -f
 
 ### Pairing Kiosks
 
-On the Server's Settings page, generate a one-time "Pairing Code" (valid for 10 minutes). Enter the Server's URL and that code on the Kiosk's Settings page to securely link it to the Server's data feed.
+Under Settings → Device on the Server, generate a one-time "Pairing Code" (valid for 10 minutes). Enter the Server's URL and that code on the Kiosk's Settings page to securely link it to the Server's data feed.
 
 ### Local Schedules
 
-Go to Settings → Local Schedule and paste the URL of your school's or league's athletics page (or a MaxPreps link). The app automatically detects the feed type (Thrillshare, MaxPreps, iCal, or RSS) and pulls in upcoming games. Feeds are re-read every 3 hours (school schedules rarely change); if the site is down the last good copy keeps showing.
+Go to Settings → Games → Local Schedule and paste the URL of your school's or league's athletics page (or a MaxPreps link). The app automatically detects the feed type (Thrillshare, MaxPreps, iCal, or RSS) and pulls in upcoming games. Feeds are re-read every 3 hours (school schedules rarely change); if the site is down the last good copy keeps showing.
 
 ![A local high school baseball game shown next to the pro and college scores](Images/scoreboard%203.png)
 
 ### Make It Yours
 
-Every color, the font and the light/dark theme are set from the Settings page, and the app can pick a palette automatically from your favorite team. The same game card can look completely different on each display, and every league uses the same layout, from the pros down to USL League One.
+Every color, the font and the light/dark theme are set under Settings → Look, and the app can pick a palette automatically from your favorite team. The same game card can look completely different on each display, and every league uses the same layout, from the pros down to USL League One.
 
 | Default look | A custom red theme |
 |---|---|
 | ![USL League One game card in the default orange and lime theme](Images/scoreboard6.png) | ![USL League One game card in a custom red theme](Images/scoreboard7.png) |
 
-Beyond games, you can add your own full-screen "special" slides (a logo, an announcement, a sponsor) that rotate in with the scores, like the one at the top of this page.
+Beyond games, you can add your own full-screen "special" slides (a logo, an announcement, a sponsor) that rotate in with the scores, like the one at the top of this page. Under Settings → Screen you also choose how cards change: slide, fade, or **Quick switch** (old card out, new card in, 0.2 to 1.9 seconds).
 
 ### Display Control
 
@@ -180,8 +209,8 @@ The app uses `xset` to control the TV over DPMS/HDMI-CEC for the scheduled "Powe
 * **Apache2 "It Works!" Default Page Instead of the Scoreboard** — That page belongs to Apache2, not this app. The scoreboard listens on port `5000` (Server/Combined) or `5001` (Kiosk), not port 80 — browse to `http://<device-ip>:5000/` instead of the bare IP. If Apache2 isn't needed on that machine, remove it with `sudo systemctl disable --now apache2 && sudo apt purge -y apache2`.
 * **Black Screen on Boot** — Check `systemctl status kiosk.service`. Make sure graphics drivers are installed if it can't open the display.
 * **Unstyled / Broken-Looking Page** — Confirm `static/css/main.css` exists under the install directory; re-run `install.sh` if it's missing.
-* **Data Not Updating** — Check backend logs with `journalctl -u scoreboard -f` and verify the machine has internet access to reach ESPN's APIs. Remember that 1.5 deliberately does not poll games that are days away: open `/api/cache/status` (logged in as admin) to see each league's last fetch, failure count, and whether it is currently being polled live. While offline the last known schedule keeps displaying, and the app retries with growing delays (up to 15 minutes).
-* **Stale or Wrong Schedule After a Change** — Press **FORCE REFRESH** on the Settings page, or delete the `cache/` folder next to `app.py` and restart the service; it rebuilds itself on the next load.
+* **Data Not Updating** — Check backend logs with `journalctl -u scoreboard -f` and verify the machine has internet access to reach ESPN's APIs. Games that are days away, and leagues without a favorite, are deliberately not polled during the day: open Settings → Updates to see each league's last check, next check and today's ESPN request count. While offline the last known schedule keeps displaying, and the app retries with growing delays (up to 1 hour).
+* **Stale or Wrong Schedule After a Change** — Press **FORCE REFRESH** on Settings → Updates, or delete the `cache/` folder next to `app.py` and restart the service; it rebuilds itself on the next load.
 * **Sudo Errors** — The app needs specific `NOPASSWD` entries in `/etc/sudoers.d/scoreboard` to control the display and services from the web UI. These are created automatically by the installer.
 
 ## How This Was Made

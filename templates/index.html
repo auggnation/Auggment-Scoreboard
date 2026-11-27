@@ -195,20 +195,23 @@
             ensureSlideshow();
         }
 
+        let switchMs = 0;   // > 0 while the "quick switch" transition is selected
+
         function advanceSlide() {
             const slides = [...document.querySelectorAll('#main-stage .slide')];
             if (!slides.length) return;
             const idx = slides.findIndex(s => s.classList.contains('active'));
+            if (idx !== -1 && slides.length === 1) return;   // nothing to switch to
             if (idx !== -1) {
                 const outgoing = slides[idx];
                 outgoing.classList.remove('active');
                 outgoing.classList.add('slide-exiting');
-                setTimeout(() => outgoing.classList.remove('slide-exiting'), 400);
+                setTimeout(() => outgoing.classList.remove('slide-exiting'), switchMs ? switchMs / 2 : 400);
             }
             const nextIdx = ((idx !== -1 ? idx : -1) + 1) % slides.length;
             const incoming = slides[nextIdx];
             incoming.classList.add('active', 'slide-entering');
-            setTimeout(() => incoming.classList.remove('slide-entering'), 600);
+            setTimeout(() => incoming.classList.remove('slide-entering'), switchMs ? switchMs + 50 : 600);
             currentSlideKey = incoming.dataset.slideKey || '';
         }
 
@@ -237,8 +240,11 @@
 
                 // Apply slide transition class
                 const trans = data.slide_transition || 'slide-right';
-                document.body.classList.remove('transition-slide-right', 'transition-slide-left', 'transition-slide-top', 'transition-slide-bottom', 'transition-fade');
+                document.body.classList.remove('transition-slide-right', 'transition-slide-left', 'transition-slide-top', 'transition-slide-bottom', 'transition-fade', 'transition-quick');
                 document.body.classList.add('transition-' + trans);
+                const switchSecs = Math.min(1.9, Math.max(0.2, Number(data.transition_seconds) || 0.8));
+                switchMs = trans === 'quick' ? switchSecs * 1000 : 0;
+                document.body.style.setProperty('--switch-time', switchSecs + 's');
 
                 // Update slide interval if duration changed
                 const newInterval = (data.slide_duration || 8) * 1000;
