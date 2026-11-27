@@ -870,18 +870,9 @@
     </div>
 
 <div class="section">
-        <div class="section-title">Admin Credentials</div>
-        <p class="cred-note">Change the username/password used to access this settings page.</p>
-        <div class="row">
-            <div>
-                <label>Username</label>
-                <input type="text" id="admin_username" autocomplete="off">
-            </div>
-            <div>
-                <label>New Password</label>
-                <input type="password" id="admin_password" placeholder="Leave blank to keep current">
-            </div>
-        </div>
+        <div class="section-title">Admin Sign-in</div>
+        <p class="cred-note">The username and password used to open this settings page.</p>
+        <a class="btn btn-quiet" href="/change-password" style="display:inline-block;text-decoration:none;">CHANGE PASSWORD</a>
     </div>
     </section>
     </main>
@@ -1384,6 +1375,11 @@
 
     // ── Server: kiosks list ──
 
+    // Anything that came from the network goes through this before becoming HTML
+    function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+    }
+
     async function loadKiosks() {
         const el = document.getElementById('kiosks-list');
         try {
@@ -1397,11 +1393,11 @@
                 <div class="kiosk-row${k.online ? ' online' : ''}">
                     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${k.online ? '#00E676' : '#444'};flex-shrink:0;"></span>
                     <div style="flex:1;">
-                        <span style="font-size:16px;font-weight:700;letter-spacing:1px;">${k.name}</span>
-                        <span style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-left:10px;">${k.ip || ''}</span>
+                        <span style="font-size:16px;font-weight:700;letter-spacing:1px;">${esc(k.name)}</span>
+                        <span style="color:#555;font-family:'Barlow',sans-serif;font-size:13px;margin-left:10px;">${esc(k.ip)}</span>
                         ${k.online ? '<span style="color:#00E676;font-size:12px;font-family:\'Barlow\',sans-serif;margin-left:8px;">ONLINE</span>' : ''}
                     </div>
-                    <button class="btn" onclick="unpairKiosk('${k.id}')" style="background:none;color:#444;border:1px solid #333;font-size:13px;padding:5px 12px;">REMOVE</button>
+                    <button class="btn" data-id="${esc(k.id)}" onclick="unpairKiosk(this.dataset.id)" style="background:none;color:#444;border:1px solid #333;font-size:13px;padding:5px 12px;">REMOVE</button>
                 </div>
             `).join('');
         } catch(e) {
@@ -1411,7 +1407,7 @@
 
     async function unpairKiosk(id) {
         if (!confirm('Remove this kiosk from the server?')) return;
-        await fetch(`/api/kiosks/${id}`, { method: 'DELETE' });
+        await fetch(`/api/kiosks/${encodeURIComponent(id)}`, { method: 'DELETE' });
         loadKiosks();
     }
 
@@ -1952,6 +1948,8 @@
     async function loadSettings() {
         const res = await fetch('/api/settings');
         currentSettings = await res.json();
+        // Signed out (session expired or password changed): only the theme comes back
+        if (!('leagues' in currentSettings)) { window.location.href = '/login'; return; }
 
         const mode = currentSettings.device_mode || 'server';
         setMode(mode);
@@ -2021,7 +2019,6 @@
         const fontPrimary = currentSettings.font_primary || 'Barlow Condensed';
         document.querySelectorAll('.font-btn').forEach(b =>
             b.classList.toggle('active', b.dataset.font === fontPrimary));
-        document.getElementById('admin_username').value = currentSettings.admin_credentials?.username || 'admin';
 
         const tzSel = document.getElementById('timezone');
         [...tzSel.options].forEach(o => o.selected = (o.value === currentSettings.timezone));
@@ -2213,10 +2210,6 @@
                 return date_windows;
             })(),
             league_conferences,
-            admin_credentials: {
-                username: document.getElementById('admin_username').value || 'admin',
-                password: document.getElementById('admin_password').value || currentSettings.admin_credentials?.password || 'root'
-            },
             specials,
             local_schedule: {
                 rss_feeds: rssFeeds.filter(f => f.url.trim()),
@@ -2243,11 +2236,13 @@
         }
 
         try {
-            await fetch('/api/settings', {
+            const res = await fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            if (res.status === 401 || res.status === 403) { window.location.href = '/login'; return; }
+            if (!res.ok) throw new Error(res.status);
             showToast('SAVED');
             refreshCacheStatus();
         } catch(e) {
@@ -2760,7 +2755,7 @@
         try {
             const { data: d } = await fetchJson('/api/wifi/scan');
             if (d.error && !d.networks.length) {
-                list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">${d.error}</p>`;
+                list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">${esc(d.error)}</p>`;
             } else if (!d.networks.length) {
                 list.innerHTML = '<p style="color:#555;font-family:\'Barlow\',sans-serif;font-size:14px;padding:12px 14px;margin:0;">No networks found.</p>';
             } else {
@@ -2768,18 +2763,18 @@
                     const bars = n.signal >= 75 ? '▂▄▆█' : n.signal >= 50 ? '▂▄▆_' : n.signal >= 25 ? '▂▄__' : '▂___';
                     const lockIcon = n.security && n.security !== 'Open' ? '🔒 ' : '';
                     const activeStyle = n.active ? 'background:rgba(0,230,118,0.08);border-left:3px solid #00E676;' : 'border-left:3px solid transparent;';
-                    return `<div onclick="wifiSelectNetwork('${n.ssid.replace(/'/g,"\\'")}', '${n.security}')"
+                    return `<div data-ssid="${esc(n.ssid)}" data-security="${esc(n.security)}" onclick="wifiSelectNetwork(this.dataset.ssid, this.dataset.security)"
                                  style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid #1a1a1a;${activeStyle}transition:background 0.15s;"
                                  onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='${n.active ? 'rgba(0,230,118,0.08)' : ''}'">
                         <span style="font-size:12px;color:#00E676;letter-spacing:1px;font-family:monospace;">${bars}</span>
-                        <span style="flex:1;font-size:15px;font-weight:700;letter-spacing:0.5px;">${lockIcon}${n.ssid}</span>
-                        <span style="font-size:12px;color:#555;font-family:'Barlow',sans-serif;">${n.security || 'Open'}</span>
+                        <span style="flex:1;font-size:15px;font-weight:700;letter-spacing:0.5px;">${lockIcon}${esc(n.ssid)}</span>
+                        <span style="font-size:12px;color:#555;font-family:'Barlow',sans-serif;">${esc(n.security || 'Open')}</span>
                         ${n.active ? '<span style="font-size:12px;color:#00E676;font-family:\'Barlow\',sans-serif;font-weight:700;">✓ CONNECTED</span>' : ''}
                     </div>`;
                 }).join('');
             }
         } catch(e) {
-            list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">Scan failed: ${e.message}</p>`;
+            list.innerHTML = `<p style="color:#FF1744;font-family:'Barlow',sans-serif;font-size:14px;padding:12px 14px;margin:0;">Scan failed: ${esc(e.message)}</p>`;
         }
         btn.disabled = false;
         btn.textContent = 'SCAN';

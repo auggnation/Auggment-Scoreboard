@@ -405,7 +405,7 @@ copy_if_exists "$SCRIPT_DIR/app.py" "$APP_DIR/app.py" || true
 copy_if_exists "$SCRIPT_DIR/smartcache.py" "$APP_DIR/smartcache.py" || true
 
 # Templates
-for tmpl in index.html login.html settings.html; do
+for tmpl in index.html login.html change_password.html settings.html; do
     SRC=$(find_src "templates/$tmpl")
     if [[ -n "$SRC" ]]; then
         copy_if_exists "$SRC" "$APP_DIR/templates/$tmpl" || true
@@ -763,10 +763,12 @@ echo ""
 echo "--- Setting Permissions ---"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR" 2>/dev/null || true
 chmod -R 755 "$APP_DIR"
-[[ -f "$APP_DIR/settings.json" ]]  && chmod 664 "$APP_DIR/settings.json"
-[[ -f "$APP_DIR/kiosk.json" ]]     && chmod 664 "$APP_DIR/kiosk.json"
-[[ -f "$APP_DIR/paired_kiosks.json" ]] && chmod 664 "$APP_DIR/paired_kiosks.json"
+# Password hash and kiosk tokens: the service account only.
+[[ -f "$APP_DIR/settings.json" ]]  && chmod 600 "$APP_DIR/settings.json"
+[[ -f "$APP_DIR/kiosk.json" ]]     && chmod 600 "$APP_DIR/kiosk.json"
+[[ -f "$APP_DIR/paired_kiosks.json" ]] && chmod 600 "$APP_DIR/paired_kiosks.json"
 [[ -f "$APP_DIR/start_kiosk.sh" ]] && chmod +x "$APP_DIR/start_kiosk.sh"
+[[ -f "$APP_DIR/.secret_key" ]]    && chmod 600 "$APP_DIR/.secret_key"
 [[ -f "$APP_DIR/init_display.sh" ]] && chmod +x "$APP_DIR/init_display.sh"
 [[ "$MODE" == "kiosk" || "$MODE" == "combined" ]] && chown -R "$APP_USER:$APP_USER" "/home/$APP_USER/.config" 2>/dev/null || true
 echo "Permissions set on $APP_DIR"
@@ -806,6 +808,7 @@ REQUIRED_FILES="$APP_DIR/app.py
 $APP_DIR/smartcache.py
 $APP_DIR/templates/index.html
 $APP_DIR/templates/login.html
+$APP_DIR/templates/change_password.html
 $APP_DIR/templates/settings.html
 $APP_DIR/static/css/main.css
 $APP_DIR/version.txt"

@@ -2,6 +2,23 @@
 
 ![Scoreboard](Images/Scoreboard1.png)
 
+**Current version: 1.7.1** · [Download the latest release](https://github.com/auggnation/Auggment-Scoreboard/releases/latest) · [What's new](#whats-new-in-171)
+
+## What's New in 1.7.1
+
+**Sign-in security.** Update the server and every kiosk, then sign in once on each to set its password. Do it soon after updating: until then the old or factory password still opens the password screen.
+
+* **Change your password at first sign-in.** The settings stay locked until you do. Existing installs are asked once too, even if the password had been changed before.
+* **Password rules** — at least 8 characters; common and trivial passwords, your username and the previous password are refused.
+* **Guessing is slowed** — after 5 wrong tries an address must wait 1 minute, doubling up to 15; a flood from many addresses pauses sign-in for 5 minutes. Pairing codes are limited the same way.
+* **The password is no longer exposed** — it is stored hashed, and `/api/settings` (which used to give it to anyone on the network) now returns only the theme unless you are signed in.
+* **Sessions** — each install has its own signing key (it used to be one public value everywhere, so sign-ins could be forged). Signing out, changing the password or restarting ends sessions; they expire after 12 hours.
+* **Other websites cannot act for you** — cross-site requests are refused, and the sign-in and settings pages cannot be framed.
+* **Injected text** — Wi-Fi network names and kiosk names can no longer run code on the settings page.
+* **Linux-account sign-in removed** — on many installs it accepted any password.
+* **Kiosks** — update downloads now require the kiosk's pairing token, and the pairing status page requires sign-in.
+* **Private files** — `settings.json`, `kiosk.json`, `paired_kiosks.json` and the session key are readable only by the service account.
+
 ## What's New in 1.6.5
 
 **Installer fixes**, tested on fresh Debian 12, Debian 13 and Ubuntu 24.04 virtual machines. If you already have the scoreboard installed: update, reboot the device once, then re-run `install.sh` from the 1.6.5 download. Your settings are kept.
@@ -89,6 +106,14 @@ The same page shows today's request count, the last week, and when each league w
 
 **Offline:** schedules, team lists and colors (7 days), local school feeds (3 hours), weather (30 minutes) and favorite-team logos are saved in `cache/` next to `app.py`. A restart or internet outage keeps showing the last known data. A paired kiosk keeps showing its server's last answer for up to 24 hours before it would ever contact ESPN itself.
 
+## Security
+
+The scoreboard is meant for your own network.
+
+* Sign in right after installing and choose your own password.
+* The settings pages use plain HTTP, so anyone able to watch your network traffic could read what you type. Do not expose the port to the internet (no port forwarding); for remote access use a VPN.
+* The score display and its data (`/`, `/api/data`) are public on your network by design.
+
 ## Requirements
 
 * **Operating System**
@@ -130,7 +155,11 @@ Once installed, find the device's IP address (`hostname -I` on the Pi, or check 
 | Combined            | `5000` | `http://<device-ip>:5000/settings`  |
 | Kiosk               | `5001` | `http://<device-ip>:5001/settings`  |
 
-**Default login is `admin` / `root`** — change this immediately under Settings → Device → Admin Credentials once you're in.
+**First sign-in is `admin` / `root`.** You are then asked to choose your own password (at least 8 characters) before the settings open. Change it later under Settings → Device → Admin Sign-in.
+
+**Forgot it?** On the device, remove the `admin_credentials` entry from `settings.json` and run `sudo systemctl restart scoreboard`. Sign in with `admin` / `root` and choose a new one.
+
+**Locked out after wrong tries?** Wait the time shown (at most 15 minutes), or restart the service to clear it.
 
 If you can't find the device's IP (e.g. no DHCP, no router access), `install.sh` automatically assigns a fallback static IP of **`192.168.1.250`** on the wired Ethernet port as a failsafe — connect a laptop to the same switch/router and browse to `http://192.168.1.250:5000/settings` (or `:5001` for kiosk-only installs).
 

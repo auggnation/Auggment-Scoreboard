@@ -1,6 +1,8 @@
 import os, json, requests, subprocess, pytz, threading, time as time_module, uuid, random, string
-import zipfile, io, shutil, tempfile
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, make_response, send_from_directory
+import zipfile, io, shutil, tempfile, secrets, hmac
+from werkzeug.security import generate_password_hash, check_password_hash
+from urllib.parse import urlparse
+from flask import Flask, g, render_template, request, jsonify, session, redirect, url_for, send_file, make_response, send_from_directory
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from dateutil import parser as dateutil_parser
@@ -8,7 +10,54 @@ import smartcache
 
 
 app = Flask(__name__)
-app.secret_key = 'scoreboard_internal_secure_key'
+
+
+def _load_secret_key():
+    """Session signing key, generated once per install and readable only by the service."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+    try:
+        with open(path) as f:
+            key = f.read().strip()
+        if len(key) >= 32:
+            return key
+    except OSError:
+        pass
+    key = secrets.token_hex(32)
+    try:
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as f:
+            f.write(key)
+    except OSError as e:
+        print(f"[auth] could not save the session key ({e}); sign-ins end at each restart")
+    return key
+
+
+app.secret_key = _load_secret_key()
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
+                  MAX_CONTENT_LENGTH=32 * 1024 * 1024)
+
+
+@app.before_request
+def _block_cross_site_writes():
+    """Another web page open in the admin's browser must not be able to change anything.
+    Browsers say where a write comes from; kiosks (not browsers) send neither header."""
+    if request.method in ('GET', 'HEAD', 'OPTIONS'):
+        return None
+    origin = request.headers.get('Origin')
+    if request.headers.get('Sec-Fetch-Site') == 'cross-site' or \
+            (origin is not None and urlparse(origin).netloc != request.host):
+        return jsonify({"error": "Cross-site request refused"}), 403
+    return None
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('Referrer-Policy', 'same-origin')
+    if request.endpoint in ('login', 'settings_page', 'change_password_page'):
+        resp.headers['X-Frame-Options'] = 'DENY'
+        resp.headers['Content-Security-Policy'] = "frame-ancestors 'none'"
+        resp.headers['Cache-Control'] = 'no-store'
+    return resp
 app.permanent_session_lifetime = timedelta(hours=1)
 
 SETTINGS_FILE = 'settings.json'
@@ -288,13 +337,164 @@ HARDCODED_CONFERENCES = {
 
 # ─── AUTH ───
 
+# ─── ADMIN SIGN-IN ───
+# One admin account, stored (hashed) in settings.json. Until its password has been
+# chosen through /change-password, signing in leads only to that page.
+
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 256                 # longer input is refused before it is hashed
+PASSWORD_HASH = 'pbkdf2:sha256:600000'    # works with every werkzeug we install
+SESSION_MAX_AGE = 12 * 3600               # sign in again at least this often
+CHANGE_FIRST = "Change the admin password first (sign in at /login)."
+COMMON_PASSWORDS = frozenset("""
+password password1 password123 passw0rd 12345678 123456789 1234567890 87654321 11111111
+00000000 qwerty123 qwertyui qwertyuiop iloveyou sunshine football baseball basketball
+princess welcome1 letmein1 trustno1 superman starwars whatever computer internet
+admin123 admin1234 adminadmin administrator rootroot root1234 toor1234 changeme
+changeme1 default1 raspberry raspberrypi scoreboard scoreboard1 gameday1 abc12345
+""".split())
+
+
+class Throttle:
+    """Slows down guessing. Each client gets FREE tries, then waits that double up to
+    MAX_WAIT; a flood from many addresses pauses everyone briefly. An attempt is counted
+    *before* it is checked, so firing many at once does not get extra guesses."""
+
+    FREE, BASE_WAIT, MAX_WAIT, FORGET = 5, 60, 15 * 60, 3600
+    FLOOD_LIMIT, FLOOD_WINDOW, FLOOD_WAIT = 60, 15 * 60, 5 * 60
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._clients = {}        # address -> [tries, last_try, locked_until]
+        self._recent = []         # times of recent unsuccessful tries, all clients
+        self._flood_until = 0
+
+    def attempt(self, client):
+        """Register a try. Returns 0 if it may proceed, else seconds to wait."""
+        now = time_module.time()
+        with self._lock:
+            for key in [k for k, v in self._clients.items() if now - v[1] > self.FORGET and now >= v[2]]:
+                del self._clients[key]
+            entry = self._clients.setdefault(client, [0, now, 0])
+            wait = max(entry[2], self._flood_until) - now
+            if wait > 0:
+                return int(wait) + 1
+            entry[0] += 1
+            entry[1] = now
+            if entry[0] >= self.FREE:                     # this try runs, the next one waits
+                entry[2] = now + min(self.MAX_WAIT, self.BASE_WAIT * 2 ** min(entry[0] - self.FREE, 10))
+            self._recent = [t for t in self._recent if now - t < self.FLOOD_WINDOW] + [now]
+            if len(self._recent) >= self.FLOOD_LIMIT:
+                self._flood_until = now + self.FLOOD_WAIT
+                self._recent = []
+            return 0
+
+    def success(self, client):
+        with self._lock:
+            self._clients.pop(client, None)
+            if self._recent:
+                self._recent.pop()
+
+
+_login_throttle = Throttle()
+_pairing_throttle = Throttle()
+_sessions = {}                # session id -> sign-in time; signing out removes it
+_sessions_lock = threading.Lock()
+
+
+def _admin_creds():
+    return get_settings().get('admin_credentials') or {}
+
+
+def check_credentials(username, password):
+    if len(password) > MAX_PASSWORD_LENGTH:
+        return False
+    creds = _admin_creds()
+    name_ok = hmac.compare_digest(str(creds.get('username', 'admin')).encode(), username.encode())
+    if creds.get('password_hash'):
+        password_ok = check_password_hash(creds['password_hash'], password)
+    else:   # not changed yet: the factory password, or one saved by an older version
+        password_ok = hmac.compare_digest(str(creds.get('password', 'root')).encode(), password.encode())
+    return name_ok and password_ok      # both always checked: same timing either way
+
+
+def attempt_login(username, password):
+    """Rate-limited credential check. Returns (ok, seconds_to_wait)."""
+    client = request.remote_addr or '?'
+    wait = _login_throttle.attempt(client)
+    if wait:
+        return False, wait
+    if check_credentials(username, password):
+        _login_throttle.success(client)
+        return True, 0
+    print(f"[auth] failed sign-in from {client}")
+    return False, 0
+
+
+def _too_many(wait):
+    minutes = (wait + 59) // 60
+    return f"Too many attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}."
+
+
+def password_change_required():
+    return not _admin_creds().get('changed_at')
+
+
+def _sign_in(username):
+    _sign_out()
+    sid, now = secrets.token_urlsafe(32), time_module.time()
+    with _sessions_lock:
+        for old in [k for k, at in _sessions.items() if now - at > SESSION_MAX_AGE]:
+            del _sessions[old]
+        _sessions[sid] = now
+    session.permanent = True
+    session.update(user=username, sid=sid, stamp=_admin_creds().get('changed_at', ''))
+
+
+def _sign_out():
+    with _sessions_lock:
+        _sessions.pop(session.get('sid'), None)
+    session.clear()
+
+
+def signed_in():
+    """Valid only while the server remembers the session (signing out or restarting ends
+    it), for SESSION_MAX_AGE at most, and only for the password it was created under."""
+    with _sessions_lock:
+        started = _sessions.get(session.get('sid'))
+    return (started is not None and time_module.time() - started < SESSION_MAX_AGE
+            and session.get('stamp') == _admin_creds().get('changed_at', ''))
+
+
+def admin_allowed():
+    """May this request administer the device? (browser session or HTTP Basic)"""
+    if password_change_required():
+        return False
+    if signed_in():
+        return True
+    basic = request.authorization
+    if not basic:
+        return False
+    if 'basic_ok' not in g:                       # count each request once
+        g.basic_ok = attempt_login(basic.username or '', basic.password or '')[0]
+    return g.basic_ok
+
+
+def _refuse():
+    if password_change_required() and signed_in():
+        return jsonify({"error": CHANGE_FIRST, "status": "password_change_required"}), 403
+    return jsonify({"error": "Unauthorized", "status": "unauthorized"}), 401
+
+
 def login_required(f):
+    """Browser sessions only."""
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if 'user' not in session:
-            if request.path.startswith('/api/'):
-                return jsonify({"error": "Unauthorized", "status": "unauthorized"}), 401
-            return redirect(url_for('login'))
+        is_api = request.path.startswith('/api/')
+        if not signed_in():
+            return _refuse() if is_api else redirect(url_for('login'))
+        if password_change_required():
+            return _refuse() if is_api else redirect(url_for('change_password_page'))
         return f(*args, **kwargs)
     return wrapper
 
@@ -302,28 +502,10 @@ def login_required(f):
 def require_admin(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if 'user' in session:
+        if admin_allowed():
             return f(*args, **kwargs)
-        auth = request.authorization
-        if auth and authenticate_linux_user(auth.username, auth.password):
-            return f(*args, **kwargs)
-        return jsonify({"error": "Unauthorized"}), 401
+        return _refuse()
     return wrapper
-
-
-def authenticate_linux_user(username, password):
-    settings = get_settings()
-    creds = settings.get('admin_credentials', {})
-    if creds.get('username') == username and creds.get('password') == password:
-        return True
-    try:
-        process = subprocess.run(
-            ['sudo', '-S', '-u', username, 'true'],
-            input=f"{password}\n", text=True, capture_output=True, timeout=5,
-        )
-        return process.returncode == 0
-    except Exception:
-        return False
 
 
 # ─── SETTINGS ───
@@ -390,6 +572,14 @@ def _is_kiosk_install():
             return bool(json.load(f).get('server_url', '').strip())
     except Exception:
         return False
+
+
+def _make_private(path):
+    """Password hash and kiosk tokens: readable by the service account only."""
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def get_settings():
@@ -487,6 +677,7 @@ def save_settings(data):
     merged['last_saved'] = datetime.now(timezone.utc).isoformat()
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(merged, f, indent=2)
+    _make_private(SETTINGS_FILE)
 
 
 # ─── KIOSK CONFIG ───
@@ -520,6 +711,7 @@ def save_kiosk_config(updates):
     allowed = ('server_url', 'kiosk_id', 'kiosk_name', 'paired', 'auth_token')
     with open(KIOSK_CONFIG_FILE, 'w') as f:
         json.dump({k: merged[k] for k in allowed if k in merged}, f, indent=2)
+    _make_private(KIOSK_CONFIG_FILE)
 
 
 # ─── KIOSK REGISTRY ───
@@ -537,6 +729,7 @@ def get_kiosks():
 def save_kiosks(kiosks):
     with open(KIOSKS_FILE, 'w') as f:
         json.dump(kiosks, f, indent=2)
+    _make_private(KIOSKS_FILE)
 
 
 class EspnLimitReached(requests.RequestException):
@@ -2181,18 +2374,73 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
-        if authenticate_linux_user(username, password):
-            session.permanent = True
-            session['user'] = username
-            return redirect(url_for('settings_page'))
+        ok, wait = attempt_login(username, password)
+        if ok:
+            _sign_in(username)
+            return redirect(url_for('change_password_page' if password_change_required()
+                                    else 'settings_page'))
+        if wait:
+            resp = make_response(render_template('login.html', error=_too_many(wait)), 429)
+            resp.headers['Retry-After'] = str(wait)
+            return resp
         return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
 
 
 @app.route('/logout')
 def logout():
-    session.pop('user', None)
+    _sign_out()
     return redirect(url_for('login'))
+
+
+def _new_password_problem(username, new, confirm):
+    if not username:
+        return "Enter a username."
+    if len(new) < MIN_PASSWORD_LENGTH:
+        return f"Use at least {MIN_PASSWORD_LENGTH} characters."
+    if len(new) > MAX_PASSWORD_LENGTH:
+        return f"Use at most {MAX_PASSWORD_LENGTH} characters."
+    if new != confirm:
+        return "The two new passwords do not match."
+    low = new.lower()
+    if low in COMMON_PASSWORDS or len(set(low)) < 4:
+        return "That password is too easy to guess."
+    if len(username) >= 4 and username.lower() in low:
+        return "Do not put your username in the password."
+    if check_credentials(_admin_creds().get('username', 'admin'), new):
+        return "Choose a password different from the current one."
+    return None
+
+
+@app.route('/change-password', methods=['GET', 'POST'])
+def change_password_page():
+    if not signed_in():
+        return redirect(url_for('login'))
+    forced = password_change_required()      # first sign-in: they just proved the old one
+    current_name = _admin_creds().get('username', 'admin')
+    username, error = current_name, None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        new = request.form.get('new_password', '')
+        wait = 0
+        if not forced:
+            ok, wait = attempt_login(current_name, request.form.get('current_password', ''))
+            if not ok:
+                error = _too_many(wait) if wait else "The current password is not right."
+        if not error:
+            error = _new_password_problem(username, new, request.form.get('confirm_password', ''))
+        if not error:
+            save_settings({"admin_credentials": {
+                "username": username,
+                "password_hash": generate_password_hash(new, method=PASSWORD_HASH),
+                "changed_at": datetime.now(timezone.utc).isoformat(),
+            }})
+            with _sessions_lock:
+                _sessions.clear()                 # everyone signs in again with the new one
+            _sign_in(username)
+            return redirect(url_for('settings_page'))
+    return render_template('change_password.html', forced=forced, username=username,
+                           error=error, min_length=MIN_PASSWORD_LENGTH)
 
 
 @app.route('/settings')
@@ -2206,19 +2454,22 @@ def settings_page():
 @app.route('/api/auth', methods=['POST'])
 def auth_api():
     data = request.get_json(silent=True) or {}
-    if authenticate_linux_user(data.get('username', ''), data.get('password', '')):
-        return jsonify({"ok": True})
+    if not password_change_required():
+        ok, wait = attempt_login(str(data.get('username', '')), str(data.get('password', '')))
+        if ok:
+            return jsonify({"ok": True})
+        if wait:
+            return jsonify({"ok": False, "error": _too_many(wait)}), 429
     return jsonify({"ok": False}), 401
 
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings_api():
     if request.method == 'POST':
-        if 'user' not in session:
-            auth = request.authorization
-            if not auth or not authenticate_linux_user(auth.username, auth.password):
-                return jsonify({"error": "Unauthorized"}), 401
+        if not admin_allowed():
+            return _refuse()
         data = request.get_json(silent=True) or {}
+        data.pop('admin_credentials', None)      # only /change-password sets these
         kiosk_updates = {}
         for field in ('server_url', 'kiosk_name', 'auth_token'):
             if field in data:
@@ -2228,6 +2479,9 @@ def settings_api():
         save_settings(data)
         return jsonify({"status": "ok"})
     s = get_settings()
+    if not admin_allowed():
+        return jsonify({"theme": s.get('theme', 'dark')})     # all the login page needs
+    s['admin_credentials'] = {"username": (s.get('admin_credentials') or {}).get('username', 'admin')}
     cfg = get_kiosk_config()
     s['server_url'] = cfg.get('server_url', '')
     s['kiosk_name'] = cfg.get('kiosk_name', 'Kiosk')
@@ -3054,7 +3308,7 @@ def pairing_code_api():
     for c in list(_pairing_codes):
         if _pairing_codes[c] < now:
             del _pairing_codes[c]
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
     _pairing_codes[code] = now + 600
     return jsonify({"code": code, "expires_in": 600})
 
@@ -3062,17 +3316,22 @@ def pairing_code_api():
 @app.route('/api/pairing/claim', methods=['POST'])
 def pairing_claim():
     data = request.get_json(silent=True) or {}
-    code = data.get('code', '').upper().strip()
-    kiosk_id = data.get('kiosk_id', '').strip()
-    kiosk_name = data.get('kiosk_name', 'Kiosk')
-    kiosk_url = data.get('kiosk_url', '')
-    if not code or not kiosk_id:
-        return jsonify({"ok": False, "error": "code and kiosk_id required"}), 400
+    code = str(data.get('code', '')).upper().strip()
+    kiosk_id = str(data.get('kiosk_id', '')).strip()
+    kiosk_name = str(data.get('kiosk_name', 'Kiosk'))[:60]
+    kiosk_url = str(data.get('kiosk_url', ''))[:200]
+    if not code or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', kiosk_id):
+        return jsonify({"ok": False, "error": "code and a valid kiosk_id required"}), 400
+    client = request.remote_addr or '?'
+    wait = _pairing_throttle.attempt(client)
+    if wait:
+        return jsonify({"ok": False, "error": _too_many(wait)}), 429
     now = time_module.time()
     if code not in _pairing_codes or _pairing_codes[code] < now:
         return jsonify({"ok": False, "error": "Invalid or expired pairing code"}), 400
     del _pairing_codes[code]
-    auth_token = uuid.uuid4().hex
+    _pairing_throttle.success(client)
+    auth_token = secrets.token_hex(32)
     kiosks = get_kiosks()
     kiosks[kiosk_id] = {
         "name": kiosk_name,
@@ -3125,6 +3384,7 @@ def pairing_connect():
 
 
 @app.route('/api/pairing/status')
+@require_admin
 def pairing_status():
     cfg = get_kiosk_config()
     server_url = cfg.get('server_url', '').strip().rstrip('/')
@@ -3234,15 +3494,12 @@ def _parse_version(v):
 
 
 def _kiosk_token_ok(req):
-    """Return True if the request carries a valid kiosk auth token or paired kiosk ID."""
+    """True if the request carries the token a paired kiosk was given."""
     token = req.headers.get('X-Kiosk-Token') or req.args.get('kiosk_token')
-    kiosk_id = req.headers.get('X-Kiosk-Id') or req.args.get('kiosk_id')
-    kiosks = get_kiosks()
-    if token and any(k.get('auth_token') == token for k in kiosks.values()):
-        return True
-    if kiosk_id and kiosk_id in kiosks:
-        return True
-    return False
+    if not token:
+        return False
+    return any(hmac.compare_digest(str(k.get('auth_token', '')).encode(), token.encode())
+               for k in get_kiosks().values() if k.get('auth_token'))
 
 
 def _check_remote_version(source_url):
@@ -3391,10 +3648,8 @@ def update_version_endpoint():
 
 @app.route('/api/update/check')
 def update_check():
-    if 'user' not in session and not _kiosk_token_ok(request):
-        auth = request.authorization
-        if not (auth and authenticate_linux_user(auth.username, auth.password)):
-            return jsonify({"error": "Unauthorized"}), 401
+    if not _kiosk_token_ok(request) and not admin_allowed():
+        return _refuse()
 
     settings = get_settings()
     upd = settings.get('update', {})
@@ -3474,10 +3729,8 @@ def update_apply():
 @app.route('/api/update/package')
 def update_package():
     """Serve the current app as a zip so kiosks can pull updates from this server."""
-    if 'user' not in session and not _kiosk_token_ok(request):
-        auth = request.authorization
-        if not (auth and authenticate_linux_user(auth.username, auth.password)):
-            return jsonify({"error": "Unauthorized"}), 401
+    if not _kiosk_token_ok(request) and not admin_allowed():
+        return _refuse()
 
     version = _read_version()
     buf = io.BytesIO()
@@ -3587,6 +3840,10 @@ def _cache_refresh_loop():
             print(f"Cache refresh loop error: {e}")
         _refresh_wakeup.wait(timeout=10)
         _refresh_wakeup.clear()
+
+
+for _private in (SETTINGS_FILE, KIOSK_CONFIG_FILE, KIOSKS_FILE):
+    _make_private(_private)
 
 
 if not (os.environ.get('WERKZEUG_RUN_MAIN') == 'false'):
