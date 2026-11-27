@@ -2,15 +2,15 @@
 
 ![Scoreboard](Images/Scoreboard1.png)
 
-## What's New (next release)
+## What's New in 1.6.5
 
-**Installer fixes**, tested on fresh Debian 12, Debian 13 and Ubuntu 24.04 virtual machines:
+**Installer fixes**, tested on fresh Debian 12, Debian 13 and Ubuntu 24.04 virtual machines. If you already have the scoreboard installed: update, reboot the device once, then re-run `install.sh` from the 1.6.5 download. Your settings are kept.
 
 * Ubuntu and Debian 12 (including Raspberry Pi OS based on it) no longer stop on a missing `python3-pytz` package, and Ubuntu no longer stops while installing Chromium.
 * Combined and server installs stay on port 5000 — opening Settings could move them to 5001 after a restart.
 * Images that boot to a text console now boot to the kiosk screen.
 * The kiosk launcher no longer remembers the folder the installer was run from.
-* **Restart Backend** and the reboot after **Apply Update** now work. On an existing install, re-run `install.sh` once; until then the app restarts its own service instead.
+* **Restart Backend** and the reboot after **Apply Update** now work. Until `install.sh` has been re-run on an existing install, the app restarts its own service instead of rebooting.
 
 ## What's New in 1.6
 
